@@ -23,7 +23,7 @@ Please move your downloaded data into the folder for model training.
 
 ## Missing Modality Setting
     cd data
-    python missing_items.py --dataset [dataset]
+    python preprocess_missing_modality.py --dataset [dataset]
 
 ## Training / Test
     cd src
