@@ -377,8 +377,8 @@ class DGMRec(GeneralRecommender):
         item_image_g, item_text_g, item_image_s, item_text_s = self.mge()
 
         # Filtering (General)
-        item_image_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.image_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:] #F.tanh(self.image_prefer2filter(self.user_image_prefer.weight.detach()))
-        item_text_filter  = torch.sparse.mm(self.adj.t(), F.tanh(self.text_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:] #F.tanh(self.text_prefer2filter(self.user_text_prefer.weight.detach()))
+        item_image_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.image_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:] 
+        item_text_filter  = torch.sparse.mm(self.adj.t(), F.tanh(self.text_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:] 
         
         item_image_g = torch.einsum("ij, ij -> ij", item_image_filter, item_image_g)
         item_text_g  = torch.einsum("ij, ij -> ij", item_text_filter, item_text_g)
