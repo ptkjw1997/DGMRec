@@ -9,7 +9,7 @@ Building on this, DGMRec generates missing modality features by integrating alig
 Extensive experiments demonstrate that DGMRec consistently outperforms state-of-the-art MRSs in challenging scenarios, including missing modalities and new item settings as well as diverse missing ratios and varying levels of missing modalities.
 Beyond recommendation tasks, DGMRec's generation-based method enables cross-modal retrieval, which is inapplicable for existing MRSs, demonstrating its adaptability and potential for real-world applications.
 
-![로컬 이미지](./img/architecture.png "로컬 이미지 설명")
+![architecture](./img/architecture.png)
 
 ## Environment
     conda create -n [env name] python=3.8
