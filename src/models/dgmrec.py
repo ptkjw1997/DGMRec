@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from common.abstract_recommender import GeneralRecommender
 from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neighbourhood, build_knn_normalized_graph
 from utils.mi_estimator import *
+from common.loss import MSELoss
 
 
 class DGMRec(GeneralRecommender):
@@ -312,10 +313,10 @@ class DGMRec(GeneralRecommender):
         item_text_s_gen = self.text_gen(self.perturb(item_text_filter))
 
         loss_gen = 0
-        loss_gen += self.MSE(item_image_s[v_index], item_image_s_gen[v_index])
-        loss_gen += self.MSE(item_text_s[t_index], item_text_s_gen[t_index])
-        loss_gen += self.MSE(item_text_g[tv_index], item_text_g_gen[tv_index])
-        loss_gen += self.MSE(item_image_g[tv_index], item_image_g_gen[tv_index])
+        loss_gen += MSELoss(item_image_s[v_index], item_image_s_gen[v_index])
+        loss_gen += MSELoss(item_text_s[t_index], item_text_s_gen[t_index])
+        loss_gen += MSELoss(item_text_g[tv_index], item_text_g_gen[tv_index])
+        loss_gen += MSELoss(item_image_g[tv_index], item_image_g_gen[tv_index])
         
         # Filtering (Specific)
         item_image_s = torch.einsum("ij, ij -> ij", item_image_filter, item_image_s)
@@ -409,7 +410,6 @@ class DGMRec(GeneralRecommender):
         score = user_emb @ pos_item_emb.T
         return score
     
-    
     def scipy_matrix_to_sparse_tenser(self, matrix, shape):
         row = matrix.row
         col = matrix.col
@@ -439,6 +439,28 @@ class DGMRec(GeneralRecommender):
         data = torch.FloatTensor(L.data)
 
         return sumArr, torch.sparse.FloatTensor(i, data, torch.Size((self.n_nodes, self.n_nodes)))
+    
+    def calculate_reg_loss(self, user_emb, pos_items_emb, neg_item_emb, image_emb, text_emb) :
+        loss_reg = self.reg_loss(user_emb, pos_items_emb, neg_item_emb) * 1e-5
+        loss_reg += self.reg_loss(image_emb) * 0.1
+        loss_reg += self.reg_loss(text_emb) * 0.1
+        return loss_reg
+    
+    def calculate_recon_loss(self, image, text) :
+        item_image_recon = self.image_decoder(self.perturb(image.detach())) 
+        item_text_recon  = self.text_decoder(self.perturb(text.detach()))
+
+        loss = 0
+        loss += F.mse_loss(item_image_recon, self.image_embedding.weight) * 0.1
+        loss += F.mse_loss(item_text_recon, self.text_embedding.weight) * 0.1
+        return loss     
+    
+    def reg_loss(self, *embs):
+        reg_loss = 0
+        for emb in embs:
+            reg_loss += torch.norm(emb, p=2)
+        reg_loss /= embs[-1].shape[0]
+        return reg_loss
 
     def bpr_loss(self, users, pos_items, neg_items):
         if len(pos_items.shape) == 2 :
@@ -451,19 +473,6 @@ class DGMRec(GeneralRecommender):
         loss = -torch.mean(torch.log(torch.sigmoid(pos_scores - neg_scores)))
         return loss
     
-    def calculate_reg_loss(self, user_emb, pos_items_emb, neg_item_emb, image_emb, text_emb) :
-        loss_reg = self.reg_loss(user_emb, pos_items_emb, neg_item_emb) * 1e-5
-        loss_reg += self.reg_loss(image_emb) * 0.1
-        loss_reg += self.reg_loss(text_emb) * 0.1
-        return loss_reg
-    
-    def reg_loss(self, *embs):
-        reg_loss = 0
-        for emb in embs:
-            reg_loss += torch.norm(emb, p=2)
-        reg_loss /= embs[-1].shape[0]
-        return reg_loss
-    
     def InfoNCE(self, view1, view2, temperature = 0.4):
         view1, view2 = F.normalize(view1, dim=1), F.normalize(view2, dim=1)
         pos_score = (view1 * view2).sum(dim=-1)
@@ -472,18 +481,6 @@ class DGMRec(GeneralRecommender):
         ttl_score = torch.exp(ttl_score / temperature).sum(dim=1)
         cl_loss = -torch.log(pos_score / ttl_score)
         return torch.mean(cl_loss)
-    
-    def calculate_recon_loss(self, image, text) :
-        item_image_recon = self.image_decoder(self.perturb(image.detach())) 
-        item_text_recon  = self.text_decoder(self.perturb(text.detach()))
-
-        loss = 0
-        loss += F.mse_loss(item_image_recon, self.image_embedding.weight) * 0.1
-        loss += F.mse_loss(item_text_recon, self.text_embedding.weight) * 0.1
-        return loss     
-    
-    def MSE(self, a, b) :
-        return F.mse_loss(a, b) * 0.5
     
     def forward(self) :
         pass

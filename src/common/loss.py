@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class BPRLoss(nn.Module):
@@ -72,3 +73,6 @@ class DiceLoss(nn.Module):
         score = ((1 + self.beta ** 2) * tp + self.smooth) / ((1 + self.beta ** 2) * tp + self.beta ** 2 * fn + fp + self.smooth)
         loss = 1 - torch.mean(score)
         return loss
+    
+def MSELoss(a, b) :
+    return F.mse_loss(a, b) * 0.5
