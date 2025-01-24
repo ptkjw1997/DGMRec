@@ -25,8 +25,21 @@ Please move your downloaded data into the folder for model training.
     cd data
     python preprocess_missing_modality.py --dataset [dataset]
 
-## Training / Test
+After running the code, it will produce `missing_items_[missing_ratio].npy` in `./data/[dataset]/` directory.
+
+## New Item Setting
+    cd data
+    python preprocess_new_items.py --dataset [dataset]
+
+After running the code, it will produce `[dataset]_del.inter` in `./data/[dataset]/` directory.
+
+## Training / Test for Missing Modality Setting
     cd src
+    python main.py --dataset [dataset] \
+        --missing_items 1 # 1 : Missing Modality Setting, 0 : No Missing Modality Setting
+
+## Training / Test for Missing Modality Setting + New Item Setting
+    cd src_new_item
     python main.py --dataset [dataset] \
         --missing_items 1 # 1 : Missing Modality Setting, 0 : No Missing Modality Setting
 
