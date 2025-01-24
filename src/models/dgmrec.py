@@ -385,8 +385,8 @@ class DGMRec(GeneralRecommender):
 
         # Item-Item Graph GCN (General)
         for _ in range(self.n_mm_layers) :
-            item_image_g = torch.sparse.mm(self.image_adj_infer, item_image_g)
-            item_text_g  = torch.sparse.mm(self.text_adj_infer, item_text_g)
+            item_image_g = torch.sparse.mm(self.image_adj, item_image_g)
+            item_text_g  = torch.sparse.mm(self.text_adj, item_text_g)
         user_image_g = torch.sparse.mm(self.adj, item_image_g) * self.num_inters[:self.n_users]
         user_text_g  = torch.sparse.mm(self.adj, item_text_g) * self.num_inters[:self.n_users]
 
@@ -396,8 +396,8 @@ class DGMRec(GeneralRecommender):
 
         # Item-Item Graph GCN (Specific)
         for _ in range(self.n_mm_layers) :
-            item_image_s = torch.sparse.mm(self.image_adj_infer, item_image_s)
-            item_text_s  = torch.sparse.mm(self.text_adj_infer, item_text_s)
+            item_image_s = torch.sparse.mm(self.image_adj, item_image_s)
+            item_text_s  = torch.sparse.mm(self.text_adj, item_text_s)
         user_image_s = torch.sparse.mm(self.adj, item_image_s) * self.num_inters[:self.n_users]
         user_text_s  = torch.sparse.mm(self.adj, item_text_s) * self.num_inters[:self.n_users]
 

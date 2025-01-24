@@ -75,4 +75,4 @@ class DiceLoss(nn.Module):
         return loss
     
 def MSELoss(a, b) :
-    return F.mse_loss(a, b) * 0.5
+    return F.mse_loss(a, b) * 0.05

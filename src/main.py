@@ -16,7 +16,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--missing_modal', type=int, default=1, help='missing_modal')
     parser.add_argument('--missing_ratio', type=str, default='0.666', help='missing_ratio')
-    parser.add_argument('--new_items', type=int, default=0, help='new_items')
 
     args, _ = parser.parse_known_args()
     
