@@ -218,12 +218,8 @@ class DGMRec(GeneralRecommender):
 
     def update_adj(self) :
         with torch.no_grad() :
-            if self.new_items :
-                t_index = np.intersect1d(self.missing_items_t, self.all_items)
-                v_index = np.intersect1d(self.missing_items_v, self.all_items)
-            else :
-                t_index = self.missing_items_t
-                v_index = self.missing_items_v
+            t_index = self.missing_items_t
+            v_index = self.missing_items_v
 
         with torch.no_grad() :
             self.image_adj = self.image_adj.cpu().to_dense()
@@ -423,7 +419,9 @@ class DGMRec(GeneralRecommender):
         inter_M_t = self.interaction_matrix.transpose()
         data_dict = dict(zip(zip(inter_M.row, inter_M.col + self.n_users), [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col), [1] * inter_M_t.nnz)))
-        A._update(data_dict)
+        # A.update(data_dict)
+        for key, value in data_dict.items() :
+            A[key] = value
         # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
         # add epsilon to avoid Devide by zero Warning

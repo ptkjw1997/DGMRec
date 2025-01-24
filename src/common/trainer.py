@@ -6,7 +6,6 @@ import torch
 import torch.optim as optim
 from torch.nn.utils.clip_grad import clip_grad_norm_
 import numpy as np
-import matplotlib.pyplot as plt
 
 from time import time
 from logging import getLogger
@@ -290,23 +289,3 @@ class Trainer(AbstractTrainer):
             _, topk_index = torch.topk(scores, max(self.config['topk']), dim=-1)  # nusers x topk
             batch_matrix_list.append(topk_index)
         return self.evaluator.evaluate(batch_matrix_list, eval_data, is_test=is_test, idx=idx)
-
-    def plot_train_loss(self, show=True, save_path=None):
-        r"""Plot the train loss in each epoch
-
-        Args:
-            show (bool, optional): whether to show this figure, default: True
-            save_path (str, optional): the data path to save the figure, default: None.
-                                       If it's None, it will not be saved.
-        """
-        epochs = list(self.train_loss_dict.keys())
-        epochs.sort()
-        values = [float(self.train_loss_dict[epoch]) for epoch in epochs]
-        plt.plot(epochs, values)
-        plt.xticks(epochs)
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        if show:
-            plt.show()
-        if save_path:
-            plt.savefig(save_path)

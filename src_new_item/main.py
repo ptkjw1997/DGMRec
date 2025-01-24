@@ -4,9 +4,6 @@ import os
 import argparse
 from utils.quick_start import quick_start
 
-os.environ['NUMEXPR_MAX_THREADS'] = '8'
-
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()

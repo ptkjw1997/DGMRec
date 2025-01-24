@@ -4,11 +4,7 @@ import os
 import argparse
 from utils.quick_start import quick_start
 
-os.environ['NUMEXPR_MAX_THREADS'] = '8'
-
-
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', '-m', type=str, default='DGMRec', help='name of models')
     parser.add_argument('--dataset', '-d', type=str, default='baby', help='name of datasets')
