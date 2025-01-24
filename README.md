@@ -12,9 +12,10 @@ Beyond recommendation tasks, DGMRec's generation-based method enables cross-moda
 ![architecture](./img/architecture.png)
 
 ## Environment
-    conda create -n [env name] python=3.8
+    conda create -n [env name] python=3.8.8
     conda activate [env name]
     pip install -r requirements.txt
+    <!-- conda install --file requirements_conda.txt -->
 
 ## Dataset
 Download from Google Drive: [Baby/Sports/Clothing](https://drive.google.com/drive/folders/13cBy1EA_saTUuXxVllKgtfci2A09jyaG?usp=sharing)
