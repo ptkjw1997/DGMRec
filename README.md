@@ -1,5 +1,5 @@
 # DGMRec
-The official source code for **DMGRec: Disentangling and Generating Modalities for Recommendation in Missing Modality Scenarios**
+The official source code for [**DMGRec: Disentangling and Generating Modalities for Recommendation in Missing Modality Scenarios**](https://arxiv.org/abs/2504.16352), accepted at **SIGIR 2025**.  
 
 ## Overview
 Multi-modal recommender systems (MRSs) have demonstrated significant success in improving personalization by leveraging diverse modalities such as images, text, and audio. However, they face two critical challenges: (1) addressing missing modality scenarios and (2) effectively disentangling shared and unique characteristics of modalities, leading to severe performance degradation. 
