@@ -137,11 +137,6 @@ class TrainDataLoader(AbstractDataLoader):
             self.user_user_dict = self._get_my_neighbors(self.config['USER_ID_FIELD'])
             self.item_item_dict = self._get_my_neighbors(self.config['ITEM_ID_FIELD'])
 
-        # New-item negative sampling: exclude items in new_items.npy from candidates.
-        self.new_items = bool(config.get('new_items', 0))
-        if self.new_items:
-            self.all_new_items_set = set(np.load(f"../data/{config['dataset']}/new_items.npy"))
-
     def pretrain_setup(self):
         """
         Reset dataloader. Outputing the same positive & negative samples with each training.
@@ -271,20 +266,12 @@ class TrainDataLoader(AbstractDataLoader):
 
     def _sample_neg_ids(self, u_ids):
         neg_ids = []
-        if self.new_items:
-            for u in u_ids:
-                # random 1 item, excluding new items
+        for u in u_ids:
+            # random 1 item
+            iid = self._random()
+            while iid in self.history_items_per_u[u]:
                 iid = self._random()
-                while (iid in self.history_items_per_u[u]) or (iid in self.all_new_items_set):
-                    iid = self._random()
-                neg_ids.append(iid)
-        else:
-            for u in u_ids:
-                # random 1 item
-                iid = self._random()
-                while iid in self.history_items_per_u[u]:
-                    iid = self._random()
-                neg_ids.append(iid)
+            neg_ids.append(iid)
         return torch.tensor(neg_ids).type(torch.LongTensor)
     
     def _get_my_neighbors(self, id_str):

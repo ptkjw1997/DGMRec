@@ -54,26 +54,19 @@ class RecDataset(object):
 
     def split(self):
         dfs = []
+        
+        # For NewItem Test
+        new_items = np.load("../data/" + self.dataset_name +'/new_items.npy')
+        total_df = pd.read_csv(f"../data/{self.dataset_name}/{self.dataset_name}.inter", sep = '\t')
+        df_0 = total_df[total_df.x_label == 0]
+        df_2 = total_df[total_df.x_label == 2]
+        new_df = pd.concat([df_2, df_0[df_0['itemID'].isin(new_items)].iloc[:, [0, 1]]])
 
         # splitting into training/validation/test
         for i in range(3):
             temp_df = self.df[self.df[self.splitting_label] == i].copy()
             temp_df.drop(self.splitting_label, inplace=True, axis=1)        # no use again
             dfs.append(temp_df)
-
-        # In new-item mode also build a new-item-only test set:
-        # test interactions (x_label == 2) union train interactions that involve a new item.
-        if self.config.get('new_items'):
-            new_items = np.load("../data/" + self.dataset_name + '/new_items.npy')
-            total_df = pd.read_csv(
-                f"../data/{self.dataset_name}/{self.dataset_name}.inter",
-                sep=self.config['field_separator'])
-            df_0 = total_df[total_df.x_label == 0]
-            df_2 = total_df[total_df.x_label == 2]
-            new_df = pd.concat([df_2, df_0[df_0['itemID'].isin(new_items)].iloc[:, [0, 1]]])
-        else:
-            new_df = None
-
         if self.config['filter_out_cod_start_users']:
             # filtering out new users in val/test sets
             train_u = set(dfs[0][self.uid_field].values)
@@ -81,18 +74,17 @@ class RecDataset(object):
                 dropped_inter = pd.Series(True, index=dfs[i].index)
                 dropped_inter ^= dfs[i][self.uid_field].isin(train_u)
                 dfs[i].drop(dfs[i].index[dropped_inter], inplace=True)
-
-            if new_df is not None:
-                dropped_inter = pd.Series(True, index=new_df.index)
-                dropped_inter ^= new_df[self.uid_field].isin(train_u)
-                new_df.drop(new_df.index[dropped_inter], inplace=True)
+            
+            dropped_inter = pd.Series(True, index=new_df.index)
+            dropped_inter ^= new_df[self.uid_field].isin(train_u)
+            new_df.drop(new_df.index[dropped_inter], inplace=True)
+            
 
         # wrap as RecDataset
         full_ds = [self.copy(_) for _ in dfs]
 
-        if new_df is None:
-            return full_ds
         new_df = self.copy(new_df)
+
         return full_ds, new_df
 
     def copy(self, new_df):

@@ -34,17 +34,12 @@ class DGMRec(GeneralRecommender):
         self.norm_adj = self.norm_adj.to(self.device)
         self.num_inters = torch.FloatTensor(1.0 / (self.num_inters + 1e-7)).to(self.device)
 
-        self.new_items = config.get('new_items', 0)
-        if self.new_items :
+        self.new_items = config['new_items']
+        if config['new_items'] :
             self.new_items_set = np.load(f"../data/{config['dataset']}/new_items.npy")
             self.old_items_set = np.setdiff1d(np.arange(self.n_items), self.new_items_set)
         else :
             self.new_items_set = self.old_items_set = np.arange(self.n_items)
-
-        # MSE-reconstruction scaling weight. Defaults to 0.05 (missing-only),
-        # 0.1 in the new-item setting unless overridden via `mse_loss_weight` in config.
-        self.mse_loss_weight = config.get('mse_loss_weight',
-                                          0.1 if self.new_items else 0.05)
 
         self.all_items = np.arange(self.n_items)
 
@@ -289,8 +284,8 @@ class DGMRec(GeneralRecommender):
 
     def generate_missing_modal_infer(self) : # Generatie Modalities for New Items
         item_image_g, item_text_g, item_image_s, item_text_s = self.mge()
-        item_image_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.image_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:]
-        item_text_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.text_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:]
+        item_image_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.image_g_filter_trans(self.user_embedding.weight))) * self.num_inters[self.n_users:]
+        item_text_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.text_g_filter_trans(self.user_embedding.weight))) * self.num_inters[self.n_users:] 
 
         with torch.no_grad() :
             item_text_g, item_image_g = self.image2text(item_image_g), self.text2image(item_text_g)
@@ -401,10 +396,10 @@ class DGMRec(GeneralRecommender):
         item_text_s_gen = self.text_gen(self.perturb(item_text_filter))
 
         loss_gen = 0
-        loss_gen += MSELoss(item_image_s[v_index], item_image_s_gen[v_index], self.mse_loss_weight)
-        loss_gen += MSELoss(item_text_s[t_index], item_text_s_gen[t_index], self.mse_loss_weight)
-        loss_gen += MSELoss(item_text_g[tv_index], item_text_g_gen[tv_index], self.mse_loss_weight)
-        loss_gen += MSELoss(item_image_g[tv_index], item_image_g_gen[tv_index], self.mse_loss_weight)
+        loss_gen += MSELoss(item_image_s[v_index], item_image_s_gen[v_index])
+        loss_gen += MSELoss(item_text_s[t_index], item_text_s_gen[t_index])
+        loss_gen += MSELoss(item_text_g[tv_index], item_text_g_gen[tv_index])
+        loss_gen += MSELoss(item_image_g[tv_index], item_image_g_gen[tv_index])
         
         # Filtering (Specific)
         item_image_s = torch.einsum("ij, ij -> ij", item_image_filter, item_image_s)

@@ -178,17 +178,6 @@ class Trainer(AbstractTrainer):
             dict: valid result
         """
 
-        # New-item inference hook: refresh generated modalities + inference adjacency
-        # before the validation pass. Only active when both new_items and missing_modal are on.
-        if (getattr(self.model, 'new_items', 0) == 1
-                and getattr(self.model, 'missing_modal', 0) == 1
-                and hasattr(self.model, 'generate_missing_modal_infer')
-                and type_ == 'val'):
-            self.model.eval()
-            self.model.generate_missing_modal_infer()
-            if getattr(self.model, 'infer_adj_update', 0) and (self.model.refresh_adj_counter % 5 == 0):
-                self.model.update_adj_infer()
-
         valid_result = self.evaluate(valid_data)
         valid_score = valid_result[self.valid_metric] if self.valid_metric else valid_result['NDCG@20']
         return valid_score, valid_result

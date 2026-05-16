@@ -120,14 +120,6 @@ class Config(object):
             raise TypeError("index must be a str.")
         return key in self.final_config_dict
 
-    def get(self, key, default=None):
-        """Dict-like accessor with default fallback."""
-        if not isinstance(key, str):
-            raise TypeError("index must be a str.")
-        if key in self.final_config_dict:
-            return self.final_config_dict[key]
-        return default
-
     def __str__(self):
         args_info = '\n'
         args_info += '\n'.join(["{}={}".format(arg, value) for arg, value in self.final_config_dict.items()])

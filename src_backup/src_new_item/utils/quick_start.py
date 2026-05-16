@@ -25,11 +25,10 @@ def quick_start(model, dataset, config_dict, save_model=True):
     # print config infor
     logger.info('██Server: \t' + platform.node())
     logger.info('██Dir: \t' + os.getcwd() + '\n')
-
-    # New-item mode swaps in the new-item-filtered interaction file.
-    if config.get('new_items'):
+    
+    if config['new_items'] :
         config['inter_file_name'] = f'{config["dataset"]}_del.inter'
-
+    
     logger.info(config)
 
     # load data
@@ -37,26 +36,16 @@ def quick_start(model, dataset, config_dict, save_model=True):
     # print dataset statistics
     logger.info(str(dataset))
 
-    split_out = dataset.split()
-    # In new-item mode, dataset.split() additionally returns a new-item-only test set.
-    if config.get('new_items'):
-        (train_dataset, valid_dataset, test_dataset), test_dataset_newitem = split_out
-    else:
-        train_dataset, valid_dataset, test_dataset = split_out
-        test_dataset_newitem = test_dataset
+    (train_dataset, valid_dataset, test_dataset), test_dataset_newitem = dataset.split()
     logger.info('\n====Training====\n' + str(train_dataset))
     logger.info('\n====Validation====\n' + str(valid_dataset))
     logger.info('\n====Testing====\n' + str(test_dataset))
-    if config.get('new_items'):
-        logger.info('\n====Testing (new-item)====\n' + str(test_dataset_newitem))
 
     # wrap into dataloader
     train_data = TrainDataLoader(config, train_dataset, batch_size=config['train_batch_size'], shuffle=True)
-    # In new-item mode the test loader uses the new-item-only test split.
-    eval_test_dataset = test_dataset_newitem if config.get('new_items') else test_dataset
     (valid_data, test_data) = (
         EvalDataLoader(config, valid_dataset, additional_dataset=train_dataset, batch_size=config['eval_batch_size']),
-        EvalDataLoader(config, eval_test_dataset, additional_dataset=train_dataset, batch_size=config['eval_batch_size']))
+        EvalDataLoader(config, test_dataset_newitem, additional_dataset=train_dataset, batch_size=config['eval_batch_size']))
 
     ############ Dataset loadded, run model
     hyper_ret = []

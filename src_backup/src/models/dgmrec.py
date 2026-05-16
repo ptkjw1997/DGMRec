@@ -34,18 +34,6 @@ class DGMRec(GeneralRecommender):
         self.norm_adj = self.norm_adj.to(self.device)
         self.num_inters = torch.FloatTensor(1.0 / (self.num_inters + 1e-7)).to(self.device)
 
-        self.new_items = config.get('new_items', 0)
-        if self.new_items :
-            self.new_items_set = np.load(f"../data/{config['dataset']}/new_items.npy")
-            self.old_items_set = np.setdiff1d(np.arange(self.n_items), self.new_items_set)
-        else :
-            self.new_items_set = self.old_items_set = np.arange(self.n_items)
-
-        # MSE-reconstruction scaling weight. Defaults to 0.05 (missing-only),
-        # 0.1 in the new-item setting unless overridden via `mse_loss_weight` in config.
-        self.mse_loss_weight = config.get('mse_loss_weight',
-                                          0.1 if self.new_items else 0.05)
-
         self.all_items = np.arange(self.n_items)
 
         self.complete_items = np.arange(self.n_items)
@@ -63,17 +51,6 @@ class DGMRec(GeneralRecommender):
                 image_adj[self.missing_items_v, :] = image_adj[:, self.missing_items_v] = 0.0
                 image_adj[self.missing_items_v, self.missing_items_v] = 1.0
             self.image_adj = compute_normalized_laplacian(image_adj).to_sparse_coo()
-
-            if self.new_items :
-                image_adj = build_sim(self.image_embedding.weight.detach())
-                image_adj[self.new_items_set, :] = image_adj[:, self.new_items_set] = 0.0
-                image_adj[self.new_items_set, self.new_items_set] = 1.0
-                image_adj = build_knn_neighbourhood(image_adj, topk=self.knn_k)
-                image_adj = compute_normalized_laplacian(image_adj).to_sparse_coo()
-                self.image_adj_infer = self.image_adj.clone()
-                self.image_adj = image_adj.cuda()
-            else :
-                self.image_adj_infer = self.image_adj
             del image_adj
             
         if self.t_feat is not None :
@@ -85,17 +62,6 @@ class DGMRec(GeneralRecommender):
                 text_adj[self.missing_items_t, :] = text_adj[:, self.missing_items_t] = 0.0
                 text_adj[self.missing_items_t, self.missing_items_t] = 1.0
             self.text_adj = compute_normalized_laplacian(text_adj).to_sparse_coo()
-
-            if self.new_items :
-                text_adj = build_sim(self.text_embedding.weight.detach())
-                text_adj[self.new_items_set, :] = text_adj[:, self.new_items_set] = 0.0
-                text_adj[self.new_items_set, self.new_items_set] = 1.0
-                text_adj = build_knn_neighbourhood(text_adj, topk=self.knn_k)
-                text_adj = compute_normalized_laplacian(text_adj).to_sparse_coo()
-                self.text_adj_infer = self.text_adj.clone()
-                self.text_adj = text_adj.cuda()
-            else :
-                self.text_adj_infer = self.text_adj
             del text_adj
 
         torch.cuda.empty_cache()
@@ -199,7 +165,7 @@ class DGMRec(GeneralRecommender):
 
         self.v_feat[self.missing_items_v] = image_mean
         self.t_feat[self.missing_items_t] = text_mean
-                
+
     def pre_epoch_processing(self) :
 
         item_image_g, item_text_g, item_image_s, item_text_s = self.mge()
@@ -252,12 +218,8 @@ class DGMRec(GeneralRecommender):
 
     def update_adj(self) :
         with torch.no_grad() :
-            if self.new_items :
-                t_index = np.intersect1d(self.missing_items_t, self.all_items)
-                v_index = np.intersect1d(self.missing_items_v, self.all_items)
-            else :
-                t_index = self.missing_items_t
-                v_index = self.missing_items_v
+            t_index = self.missing_items_t
+            v_index = self.missing_items_v
 
         with torch.no_grad() :
             self.image_adj = self.image_adj.cpu().to_dense()
@@ -287,60 +249,6 @@ class DGMRec(GeneralRecommender):
             self.image_adj = self.image_adj.to(self.device)
             self.text_adj = self.text_adj.to(self.device)
 
-    def generate_missing_modal_infer(self) : # Generatie Modalities for New Items
-        item_image_g, item_text_g, item_image_s, item_text_s = self.mge()
-        item_image_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.image_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:]
-        item_text_filter = torch.sparse.mm(self.adj.t(), F.tanh(self.text_preference_(self.user_embedding.weight))) * self.num_inters[self.n_users:]
-
-        with torch.no_grad() :
-            item_text_g, item_image_g = self.image2text(item_image_g), self.text2image(item_text_g)
-            for _ in range(self.n_mm_layers) :
-                item_image_g = torch.sparse.mm(self.image_adj_infer, item_image_g)
-                item_text_g  = torch.sparse.mm(self.text_adj_infer, item_text_g)
-
-            item_image_s, item_text_s = self.image_gen(item_image_filter), self.text_gen(item_text_filter)
-            for _ in range(self.n_mm_layers) :
-                item_image_s = torch.sparse.mm(self.image_adj_infer, item_image_s)
-                item_text_s  = torch.sparse.mm(self.text_adj_infer, item_text_s)
-
-            item_image_recon = self.image_decoder(self.perturb(torch.concat([item_image_g, item_image_s], dim = 1)))
-            item_text_recon = self.text_decoder(self.perturb(torch.concat([item_text_g, item_text_s], dim = 1)))
-
-        with torch.no_grad() :
-            self.text_embedding.weight[np.intersect1d(self.missing_items['t'], self.new_items_set)] = item_text_recon[np.intersect1d(self.missing_items['t'], self.new_items_set)]
-            self.image_embedding.weight[np.intersect1d(self.missing_items['v'], self.new_items_set)] = item_image_recon[np.intersect1d(self.missing_items['v'], self.new_items_set)]
-
-    def update_adj_infer(self) :
-        with torch.no_grad() :
-            t_index = np.intersect1d(self.missing_items_t, self.new_items_set)
-            v_index = np.intersect1d(self.missing_items_v, self.new_items_set)
-
-        with torch.no_grad() :
-            self.image_adj_infer = self.image_adj_infer.cpu().to_dense()
-            torch.cuda.empty_cache()
-
-            image_adj = build_sim(self.image_embedding.weight.detach())
-            image_adj = build_knn_neighbourhood(image_adj, topk=self.knn_k)
-            image_adj = compute_normalized_laplacian(image_adj).cpu()
-
-            self.image_adj_infer[v_index] = image_adj[v_index] * self.avg_lambda + self.image_adj_infer[v_index] * (1 - self.avg_lambda)
-            self.image_adj_infer = self.image_adj_infer.to_sparse_coo()
-            del image_adj
-
-            self.text_adj_infer = self.text_adj_infer.cpu().to_dense()
-            torch.cuda.empty_cache()
-
-            text_adj = build_sim(self.text_embedding.weight.detach())
-            text_adj = build_knn_neighbourhood(text_adj, topk=self.knn_k)
-            text_adj = compute_normalized_laplacian(text_adj).cpu()
-
-            self.text_adj_infer[t_index] = text_adj[t_index] * self.avg_lambda + self.text_adj_infer[t_index] * (1 - self.avg_lambda)
-            self.text_adj_infer = self.text_adj_infer.to_sparse_coo()
-            del text_adj
-
-            torch.cuda.empty_cache()
-            self.image_adj_infer = self.image_adj_infer.to(self.device)
-            self.text_adj_infer = self.text_adj_infer.to(self.device)
     
     def cge(self, user_emb, item_emb, adj) :
         # Collaborative Filtering 
@@ -401,10 +309,10 @@ class DGMRec(GeneralRecommender):
         item_text_s_gen = self.text_gen(self.perturb(item_text_filter))
 
         loss_gen = 0
-        loss_gen += MSELoss(item_image_s[v_index], item_image_s_gen[v_index], self.mse_loss_weight)
-        loss_gen += MSELoss(item_text_s[t_index], item_text_s_gen[t_index], self.mse_loss_weight)
-        loss_gen += MSELoss(item_text_g[tv_index], item_text_g_gen[tv_index], self.mse_loss_weight)
-        loss_gen += MSELoss(item_image_g[tv_index], item_image_g_gen[tv_index], self.mse_loss_weight)
+        loss_gen += MSELoss(item_image_s[v_index], item_image_s_gen[v_index])
+        loss_gen += MSELoss(item_text_s[t_index], item_text_s_gen[t_index])
+        loss_gen += MSELoss(item_text_g[tv_index], item_text_g_gen[tv_index])
+        loss_gen += MSELoss(item_image_g[tv_index], item_image_g_gen[tv_index])
         
         # Filtering (Specific)
         item_image_s = torch.einsum("ij, ij -> ij", item_image_filter, item_image_s)
@@ -473,8 +381,8 @@ class DGMRec(GeneralRecommender):
 
         # Item-Item Graph GCN (General)
         for _ in range(self.n_mm_layers) :
-            item_image_g = torch.sparse.mm(self.image_adj_infer, item_image_g)
-            item_text_g  = torch.sparse.mm(self.text_adj_infer, item_text_g)
+            item_image_g = torch.sparse.mm(self.image_adj, item_image_g)
+            item_text_g  = torch.sparse.mm(self.text_adj, item_text_g)
         user_image_g = torch.sparse.mm(self.adj, item_image_g) * self.num_inters[:self.n_users]
         user_text_g  = torch.sparse.mm(self.adj, item_text_g) * self.num_inters[:self.n_users]
 
@@ -484,8 +392,8 @@ class DGMRec(GeneralRecommender):
 
         # Item-Item Graph GCN (Specific)
         for _ in range(self.n_mm_layers) :
-            item_image_s = torch.sparse.mm(self.image_adj_infer, item_image_s)
-            item_text_s  = torch.sparse.mm(self.text_adj_infer, item_text_s)
+            item_image_s = torch.sparse.mm(self.image_adj, item_image_s)
+            item_text_s  = torch.sparse.mm(self.text_adj, item_text_s)
         user_image_s = torch.sparse.mm(self.adj, item_image_s) * self.num_inters[:self.n_users]
         user_text_s  = torch.sparse.mm(self.adj, item_text_s) * self.num_inters[:self.n_users]
 
@@ -511,7 +419,7 @@ class DGMRec(GeneralRecommender):
         inter_M_t = self.interaction_matrix.transpose()
         data_dict = dict(zip(zip(inter_M.row, inter_M.col + self.n_users), [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col), [1] * inter_M_t.nnz)))
-        # A._update(data_dict)
+        # A.update(data_dict)
         for key, value in data_dict.items() :
             A[key] = value
         # norm adj matrix

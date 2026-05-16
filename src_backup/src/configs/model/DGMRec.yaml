@@ -1,0 +1,16 @@
+# Baby
+embedding_size: 64
+
+n_ui_layers: 3
+n_mm_layers: 2
+knn_k: 10
+
+mi_hidden_dim : 64 
+
+alpha : 0.4 
+lambda_1 : 0.01
+lambda_2 : 0.01
+
+infoNCETemp : 0.4
+alignBMTemp : 0.4
+alignUITemp : 0.2

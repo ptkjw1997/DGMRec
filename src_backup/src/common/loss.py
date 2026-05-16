@@ -74,11 +74,5 @@ class DiceLoss(nn.Module):
         loss = 1 - torch.mean(score)
         return loss
     
-def MSELoss(a, b, weight: float = 0.05):
-    """Reconstruction MSE loss with a configurable scaling weight.
-
-    Default 0.05 matches the missing-only setting. The new-item setting
-    historically used 0.1 — pass `weight=0.1` (or set the model's
-    `mse_loss_weight` via config) in that case.
-    """
-    return F.mse_loss(a, b) * weight
+def MSELoss(a, b) :
+    return F.mse_loss(a, b) * 0.05

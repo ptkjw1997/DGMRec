@@ -12,16 +12,13 @@ if __name__ == '__main__':
 
     parser.add_argument('--missing_modal', type=int, default=1, help='missing_modal')
     parser.add_argument('--missing_ratio', type=str, default='0.666', help='missing_ratio')
-    parser.add_argument('--new_items', type=int, default=0,
-                        help='new_items setting (0: missing-only [default], 1: missing + new-item)')
 
     args, _ = parser.parse_known_args()
-
+    
     config_dict = {
         'gpu_id': args.gpu_id,
         'missing_modal' : args.missing_modal,
-        'missing_ratio' : eval(args.missing_ratio),
-        'new_items' : args.new_items,
+        'missing_ratio' : eval(args.missing_ratio)
     }
 
 
