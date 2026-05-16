@@ -74,12 +74,19 @@ This is equivalent to running the legacy `src_new_item/main.py`.
 
 ### Backup
 
-The original code trees are preserved verbatim under `src_backup/` for direct
-reference or fallback:
+The pre-unification code is preserved verbatim under `src_backup/` as a
+single tree (the legacy `src_new_item/` snapshot, which is a strict
+superset of the legacy `src/` — the only difference between the two old
+trees was new-item support):
 
     src_backup/
-    ├── src/             # original missing-only tree
-    └── src_new_item/    # original missing + new-item tree
+    ├── common/
+    ├── configs/
+    ├── main.py
+    ├── models/
+    └── utils/
 
-If anything goes wrong with the unified `src/`, you can `cd src_backup/src` or
-`cd src_backup/src_new_item` and run the legacy `main.py` exactly as before.
+If anything goes wrong with the unified `src/`, `cd src_backup` and run
+`python main.py --dataset [dataset] --new_items 0` (missing-only) or
+`python main.py --dataset [dataset] --new_items 1` (missing + new-item)
+exactly as the old README described.
