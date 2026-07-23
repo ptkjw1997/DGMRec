@@ -1,0 +1,18 @@
+{
+  "n_layers": [
+    1
+  ],
+  "reg_weight": [
+    0
+  ],
+  "learning_rate": [
+    0.005
+  ],
+  "hyper_parameters": [
+    "n_layers",
+    "reg_weight",
+    "learning_rate",
+    "missing_imputation",
+    "seed"
+  ]
+}

@@ -1,0 +1,7 @@
+embedding_size: 64
+n_ui_layers: [3]
+reg_weight: [1e-04]
+
+is_multimodal_model: False
+
+hyper_parameters: ["n_ui_layers", "reg_weight", "missing_imputation"]

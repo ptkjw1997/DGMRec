@@ -1,0 +1,3 @@
+embedding_size: 64
+reg_weight: [2.0, 1.0, 0.1, 0.01, 0.001]
+hyper_parameters: ["reg_weight", "missing_imputation"]

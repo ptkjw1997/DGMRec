@@ -92,6 +92,13 @@ class TopKEvaluator(object):
             bool_rec_matrix.append([True if i in m else False for i in n])
         bool_rec_matrix = np.asarray(bool_rec_matrix)
 
+        # Per-user metric vectors for paired significance testing.
+        # Cached here; the trainer persists the copy that corresponds to the
+        # best-validation epoch (see Trainer.fit).
+        if is_test and self.config['save_user_metrics']:
+            self.last_user_metrics = self._per_user_metrics(
+                np.asarray(pos_len_list), bool_rec_matrix, eval_data.get_eval_users())
+
         # get metrics
         metric_dict = {}
         result_list = self._calculate_metrics(pos_len_list, bool_rec_matrix)
@@ -100,6 +107,20 @@ class TopKEvaluator(object):
                 key = '{}@{}'.format(metric, k)
                 metric_dict[key] = round(value[k - 1], 4)
         return metric_dict
+
+    def _per_user_metrics(self, pos_len, bool_rec, users):
+        """Per-user Recall@k and NDCG@k vectors (for paired t-tests)."""
+        out = {'users': np.asarray(users)}
+        hits_cum = np.cumsum(bool_rec, axis=1)
+        n_pos = pos_len.astype(np.float64)
+        discounts = 1.0 / np.log2(np.arange(2, bool_rec.shape[1] + 2))
+        dcg_cum = np.cumsum(bool_rec * discounts, axis=1)
+        idcg_full = np.cumsum(discounts)
+        for k in self.topk:
+            out[f'recall@{k}'] = hits_cum[:, k - 1] / n_pos
+            idcg = idcg_full[np.minimum(pos_len, k) - 1]
+            out[f'ndcg@{k}'] = dcg_cum[:, k - 1] / idcg
+        return out
 
     def _check_args(self):
         # Check metrics

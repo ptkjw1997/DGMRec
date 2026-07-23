@@ -1,0 +1,14 @@
+{
+  "lamb": [
+    0.01
+  ],
+  "temp": [
+    10.0
+  ],
+  "hyper_parameters": [
+    "lamb",
+    "missing_imputation",
+    "seed",
+    "temp"
+  ]
+}

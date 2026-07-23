@@ -1,16 +1,30 @@
-# Baby
+# DGMRec defaults. Per-dataset best values live in configs/best/DGMRec_*.json
+# (loaded by run.sh / scripts/make_jobs.py) and override the values below.
 embedding_size: 64
+learning_rate_scheduler: [0.96, 50]
 
-n_ui_layers: 3
-n_mm_layers: 2
-knn_k: 10
+train_batch_size: 4096
+eval_batch_size: 4096
+stopping_step: 30
 
-mi_hidden_dim : 64 
+knn_k: 10          # top-k of the modality kNN item graphs
+n_mm_layers: 1     # propagation depth on the modality graphs
 
-alpha : 0.4 
-lambda_1 : 0.01
-lambda_2 : 0.01
+# loss weights / temperatures
+interModal: 0.01
+interModalTemp: 0.4
+interModalDist: 0.001
+intraModal: 0.01
+intraModalTemp: 0.1
+alignBM: 0.01
+alignBMTemp: 0.2
+recon: 0.1
+reg: 0.1
+sampler: 0.01
 
-infoNCETemp : 0.4
-alignBMTemp : 0.4
-alignUITemp : 0.2
+# missing-modality generation
+additive: 1.0        # weight of the generation (additive) losses
+avg_lambda: 0.8      # blending weight when refreshing kNN graph rows
+infer_adj_update: 1  # also refresh the inference graphs (new-item mode)
+
+hyper_parameters: ['seed', 'missing_imputation']

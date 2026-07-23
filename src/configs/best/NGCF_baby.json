@@ -1,0 +1,15 @@
+{
+  "reg_weight": 0.01,
+  "hyper_parameters": [
+    "seed",
+    "missing_imputation"
+  ],
+  "weight_size": [
+    64,
+    64
+  ],
+  "mess_dropout": [
+    0.1,
+    0.1
+  ]
+}

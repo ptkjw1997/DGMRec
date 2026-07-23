@@ -1,0 +1,22 @@
+embedding_size: 64
+feat_embed_dim: 64
+weight_size: [64, 64]
+
+n_mm_layers: 1 # [1, 2]
+n_ui_layers: [2, 3] # [1, 2, 3]
+lamb_1 : [1.0]
+lamb_2 : [1.0]
+
+n_hyper_layers : 2
+knn_k: 10 # [3, 5, 10, 15, 20]
+learning_rate: [0.001] # , 0.0005, 0.0001]
+temp : 1.0
+
+
+missing_modal : 0
+missing_imputation : [1]
+
+new_items : 0
+
+
+hyper_parameters: ["learning_rate", "missing_imputation", "n_ui_layers", "lamb_1", "lamb_2"]

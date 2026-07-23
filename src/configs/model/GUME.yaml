@@ -1,0 +1,38 @@
+embedding_size: 64
+learning_rate_scheduler: [0.96, 50]
+learning_rate: 0.001
+reg_weight_1: 1e-05
+knn_k: 10
+n_ui_layers: 2
+bm_loss: 0.01
+reg_weight_2: 0.1
+
+# # baby
+n_layers: 1
+bm_temp: 0.4
+um_loss: 0.01
+um_temp: 0.1
+vt_loss: 0.1
+
+# # sports
+# n_layers: 1
+# bm_temp: 0.2
+# um_loss: 0.01
+# um_temp: 0.1
+# vt_loss: 0.01
+
+# # clothing
+# n_layers: 1
+# bm_temp: 0.2
+# um_loss: 0.1
+# um_temp: 0.2
+# vt_loss: 0.001
+
+# # elec
+# n_layers: 1
+# bm_temp: 0.2
+# um_loss: 0.1
+# um_temp: 0.2
+# vt_loss: 0.1
+
+hyper_parameters : ['missing_imputation']

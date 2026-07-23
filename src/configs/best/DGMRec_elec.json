@@ -1,0 +1,19 @@
+{
+  "n_mm_layers": 1,
+  "additive": 1.0,
+  "avg_lambda": 0.8,
+  "interModal": 0.01,
+  "interModalTemp": 0.2,
+  "interModalDist": 0.001,
+  "intraModalTemp": 0.1,
+  "alignBMTemp": 0.2,
+  "recon": 0.1,
+  "reg": 0.1,
+  "sampler": 0.01,
+  "infer_adj_update": 1,
+  "hyper_parameters": [
+    "seed",
+    "missing_imputation"
+  ],
+  "alignBM": 0.01
+}

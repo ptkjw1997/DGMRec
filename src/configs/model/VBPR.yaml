@@ -1,0 +1,12 @@
+embedding_size: 64
+feat_embed_dim: 64
+weight_size: [64, 64]
+
+
+missing_modal : 0
+missing_imputation : 0 # [0, 1, 2]
+learning_rate: 0.005
+new_items : 0 
+reg_weight : [1.0, 0.0, 0.1, 0.01, 0.001]
+
+hyper_parameters: ['use_modal_type', "missing_imputation", "reg_weight"]

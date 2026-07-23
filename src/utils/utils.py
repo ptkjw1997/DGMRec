@@ -117,7 +117,7 @@ def build_knn_neighbourhood(adj, topk):
 
 def compute_normalized_laplacian(adj):
     rowsum = torch.sum(adj, -1)
-    d_inv_sqrt = torch.pow(rowsum, -0.5)
+    d_inv_sqrt = torch.pow(rowsum.clamp(min=1e-7), -0.5)
     d_inv_sqrt[torch.isinf(d_inv_sqrt)] = 0.
     d_mat_inv_sqrt = torch.diagflat(d_inv_sqrt)
     L_norm = torch.mm(torch.mm(d_mat_inv_sqrt, adj), d_mat_inv_sqrt)

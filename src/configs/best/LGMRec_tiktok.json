@@ -1,0 +1,29 @@
+{
+  "n_ui_layers": [
+    2
+  ],
+  "n_mm_layers": [
+    2
+  ],
+  "n_hyper_layer": [
+    1
+  ],
+  "hyper_num": [
+    4
+  ],
+  "keep_rate": [
+    0.5
+  ],
+  "alpha": [
+    0.3
+  ],
+  "cl_weight": [
+    0.0001
+  ],
+  "reg_weight": [
+    1e-06
+  ],
+  "gen_weight": [
+    0.0
+  ]
+}

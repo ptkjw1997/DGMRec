@@ -1,0 +1,17 @@
+{
+  "reg_coeff": [
+    0.0001
+  ],
+  "penalty_coeff": [
+    500
+  ],
+  "align_coeff": [
+    0.4
+  ],
+  "alpha": [
+    0.2
+  ],
+  "learning_rate": [
+    0.001
+  ]
+}

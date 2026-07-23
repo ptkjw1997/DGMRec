@@ -84,7 +84,9 @@ class Trainer(AbstractTrainer):
         self.best_test_upon_valid = tmp_dd
         self.train_loss_dict = dict()
         self.optimizer = self._build_optimizer()
-        self.model.init_mi_estimator()
+        # DGMRec-specific: CLUB MI estimators are built lazily after the optimizer.
+        if hasattr(self.model, 'init_mi_estimator'):
+            self.model.init_mi_estimator()
 
         lr_scheduler = config['learning_rate_scheduler']  
         fac = lambda epoch: lr_scheduler[0] ** (epoch / lr_scheduler[1])
@@ -135,9 +137,11 @@ class Trainer(AbstractTrainer):
 
         self.model.train()
 
-        self.model.item_image_estimator.eval()
-        self.model.item_text_estimator.eval()
-        
+        # DGMRec-specific: MI estimators are trained on their own schedule.
+        if hasattr(self.model, 'item_image_estimator'):
+            self.model.item_image_estimator.eval()
+            self.model.item_text_estimator.eval()
+
         loss_func = loss_func or self.model.calculate_loss
         total_loss = None
         loss_batches = []
@@ -189,7 +193,7 @@ class Trainer(AbstractTrainer):
             if getattr(self.model, 'infer_adj_update', 0) and (self.model.refresh_adj_counter % 5 == 0):
                 self.model.update_adj_infer()
 
-        valid_result = self.evaluate(valid_data)
+        valid_result = self.evaluate(valid_data, is_test=(type_ == 'test'))
         valid_score = valid_result[self.valid_metric] if self.valid_metric else valid_result['NDCG@20']
         return valid_score, valid_result
 
@@ -269,6 +273,13 @@ class Trainer(AbstractTrainer):
                         self.logger.info(update_output)
                     self.best_valid_result = valid_result
                     self.best_test_upon_valid = test_result
+                    if self.config['save_best_model'] and save_dir is not None:
+                        os.makedirs(save_dir, exist_ok=True)
+                        torch.save(self.model, os.path.join(save_dir, 'best.pth'))
+                    if self.config['save_user_metrics'] and getattr(self.evaluator, 'last_user_metrics', None) is not None:
+                        path = self.config['user_metrics_path'] or 'user_metrics.npz'
+                        os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+                        np.savez(path, **self.evaluator.last_user_metrics)
 
                 if stop_flag:
                     stop_output = '+++++Finished training, best eval result in epoch %d' % \

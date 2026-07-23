@@ -20,12 +20,12 @@ req_training: True
 
 # training settings
 epochs: 500
-stopping_step: 30
+stopping_step: 25
 train_batch_size: 2048 # 2048
 learner: adam
 learning_rate: 0.001
-learning_rate_scheduler: [0.96, 50]
-eval_step: 1
+learning_rate_scheduler: [1.0, 50]
+eval_step: 3
 
 training_neg_sample_num: 1
 use_neg_sampling: True
@@ -39,8 +39,8 @@ field_separator: "\t"
 
 
 # evaluation settings
-metrics: ["Recall", "NDCG", "Precision", "MAP"]
-topk: [5, 10, 20, 50]
+metrics: ["Recall", "NDCG"]
+topk: [10, 20, 50]
 valid_metric: Recall@20
 eval_batch_size: 4096
 
@@ -57,6 +57,10 @@ layer_norm_eps: 1e-12
 hidden_dropout_prob: 0.1
 
 end2end: False
+
+save_best_model: False
+missing_imputation: [1]
+missing_ratio: 0.666   # per-dataset override in configs/dataset/*.yaml (tiktok: 0.6)
 
 # iteration parameters
 hyper_parameters: ["seed"]

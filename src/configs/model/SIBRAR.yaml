@@ -1,0 +1,4 @@
+
+temp : [0.01, 0.1, 1.0, 3.0, 5.0, 10.0]
+lamb : [1.0, 5.0, 0.1, 0.01, 0.001]
+hyper_parameters : ['lamb', 'temp', 'missing_imputation']

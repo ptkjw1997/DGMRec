@@ -1,0 +1,20 @@
+{
+  "hyper_parameters": [
+    "seed",
+    "missing_imputation"
+  ],
+  "n_mm_layers": 2,
+  "additive": 0.1,
+  "avg_lambda": 0.4,
+  "interModalTemp": 0.4,
+  "interModalDist": 0.1,
+  "intraModalTemp": 0.2,
+  "alignBMTemp": 0.4,
+  "recon": 0.1,
+  "reg": 0.1,
+  "sampler": 0.01,
+  "infer_adj_update": 0,
+  "interModal": 0.01,
+  "alignBM": 0.01,
+  "train_batch_size": 2048
+}

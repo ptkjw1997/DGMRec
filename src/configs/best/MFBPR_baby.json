@@ -1,0 +1,7 @@
+{
+  "reg_weight": 0.1,
+  "hyper_parameters": [
+    "seed",
+    "missing_imputation"
+  ]
+}

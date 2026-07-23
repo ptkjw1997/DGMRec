@@ -1,92 +1,106 @@
 # DGMRec
-The official source code for [**DMGRec: Disentangling and Generating Modalities for Recommendation in Missing Modality Scenarios**](https://arxiv.org/abs/2504.16352), accepted at **SIGIR 2025**.
+
+The official source code for [**DGMRec: Disentangling and Generating Modalities for Recommendation in Missing Modality Scenarios**](https://arxiv.org/abs/2504.16352) (**SIGIR 2025**) and its extended journal version, *Towards Robust Real-World Multi-Modal Recommendation: Disentangling and Generating Missing Modalities* (under review at ACM TORS).
+
+> `main` contains the extended version used for the journal submission: all compared baselines in a single pipeline, pinned per-model configurations and seeds, and one-command reproduction. The original SIGIR 2025 release is preserved on the [`sigir25`](../../tree/sigir25) branch.
 
 ## Overview
-Multi-modal recommender systems (MRSs) have demonstrated significant success in improving personalization by leveraging diverse modalities such as images, text, and audio. However, they face two critical challenges: (1) addressing missing modality scenarios and (2) effectively disentangling shared and unique characteristics of modalities, leading to severe performance degradation.
+
+Multi-modal recommender systems (MRSs) have demonstrated significant success in improving personalization by leveraging diverse modalities such as images, text, and audio. However, they face two critical challenges: (1) addressing missing modality scenarios and (2) effectively disentangling shared and unique characteristics of modalities.
 To overcome these challenges, we propose **D**isentangling and **G**enerating **M**odality **Rec**ommender (DGMRec), a novel framework designed for missing modality scenarios.
-DGMRec disentangles modality features into general and specific modality features from an information perspective to achieve better representations for recommendation.
-Building on this, DGMRec generates missing modality features by integrating aligned features from other modalities and leveraging modality preferences, enabling the accurate reconstruction of missing modalities.
-Extensive experiments demonstrate that DGMRec consistently outperforms state-of-the-art MRSs in challenging scenarios, including missing modalities and new item settings as well as diverse missing ratios and varying levels of missing modalities.
-Beyond recommendation tasks, DGMRec's generation-based method enables cross-modal retrieval, which is inapplicable for existing MRSs, demonstrating its adaptability and potential for real-world applications.
+DGMRec disentangles modality features into general and specific modality features from an information perspective, and generates missing modality features by integrating aligned features from other modalities and leveraging modality preferences.
 
 ![architecture](./img/architecture.png)
 
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `src/` | Single source tree for all datasets: the two-modality Amazon sets (Baby / Sports / Clothing / Electronics, image + text) and the three-modality TikTok set (image + text + audio) |
+| `src*/configs/best/` | Exact per-model, per-dataset configurations used for the reported results |
+| `data/masks/` | The exact missing-modality masks and interaction splits used in the paper |
+| `scripts/` | Data download, experiment runner, and result aggregation |
+
+**One tree, two modality structures.** The Amazon datasets carry two
+modalities while TikTok carries three (image, text, audio), and its
+missing-modality masks cover 7 missing combinations instead of 3. The single
+tree handles both structurally: audio branches are guarded by
+`if self.a_feat is not None:` (the framework loads the audio features only
+when the dataset config declares an `audio_feature_file`), and the mask
+preprocessing branches on the keys present in `missing_items_*.npy`. All
+TikTok-specific settings live in `src/configs/dataset/tiktok.yaml` and
+`src/configs/best/*_tiktok.json`; no model or framework code is
+dataset-conditional. The unified tree was verified to be numerically
+identical (same-seed initialization, losses, and predictions) to the two
+historical trees it replaces.
+
 ## Environment
-    conda create -n [env name] python=3.9
-    conda activate [env name]
+
+    conda create -n dgmrec python=3.9
+    conda activate dgmrec
     pip install -r requirements.txt
 
 ## Dataset
-Download from Google Drive: [Baby/Sports/Clothing](https://drive.google.com/drive/folders/13cBy1EA_saTUuXxVllKgtfci2A09jyaG?usp=sharing) from [MMRec](https://github.com/enoche/MMRec).
 
-The data already contains text and image features extracted from Sentence-Transformers and CNN, which is provided by [MMRec](https://github.com/enoche/MMRec).
-Please move your downloaded data into the folder for model training.
+    bash scripts/download_data.sh <dataset>      # baby / sports / clothing / elec
 
-## Missing Modality Setting
-    cd data
-    python preprocess_missing_modality.py --dataset [dataset]
+Feature files are downloaded from Google Drive ([Baby/Sports/Clothing/Elec](https://drive.google.com/drive/folders/13cBy1EA_saTUuXxVllKgtfci2A09jyaG?usp=sharing), provided by [MMRec](https://github.com/enoche/MMRec)). The interaction files, split labels, and the exact missing-modality masks used in the paper are already shipped under `data/masks/` — no preprocessing is required for reproduction. (`data/preprocess_*.py` are included only for regenerating masks from scratch.)
 
-After running the code, it will produce `missing_items_[missing_ratio].npy` in `./data/[dataset]/` directory.
+## One-command reproduction
 
-## New Item Setting
-    cd data
-    python preprocess_new_items.py --dataset [dataset]
+    ./run.sh <MODEL> <DATASET> [SEED]        # e.g. ./run.sh DGMRec baby 999
 
-After running the code, it will produce `[dataset]_del.inter` in `./data/[dataset]/` directory.
+or with Docker:
 
-## Unified `src/` (Missing-only + New-item)
+    docker build -t dgmrec:tors .
+    docker run --gpus all -v $PWD/data:/workspace/data dgmrec:tors DGMRec baby 999
 
-The previous repository shipped **two separate code trees** — `src/` for the
-missing-modality setting and `src_new_item/` for the missing-modality + new-item
-setting — that duplicated most of their logic and could drift out of sync. The
-new `src/` here merges them into a **single tree** that picks the right code
-path from a `--new_items` flag, so both experiments are reproducible from one
-entry point.
+- `MODEL` ∈ DGMRec, LGMRec, GUME, DAMRS, MGCN, BM3, LATTICE, SLMRec, GRCN, MMGCN, VBPR, MFBPR, NGCF, SGL, SimGCL, LightGCN, MILK, SIBRAR, CI2MG
+- `DATASET` ∈ baby, sports, clothing, elec
+- For the missing-modality + new-item setting, pass `--new_items 1` to `src/main.py` (or use the experiment runner below).
 
-### Training / Test for Missing Modality only (default)
+Hard-coded best configurations per (model, dataset) live in `src/configs/best/*.json`; shared training settings in `src/configs/overall.yaml`. All internal options are pinned by these files and the model YAMLs — reproduction does not require modifying any of them.
 
-    cd src
-    python main.py --dataset [dataset] \
-        --missing_modal 1 \
-        --new_items 0
+**Random seeds** used for the multi-seed results in the paper: `999, 42, 2023, 2024, 2025`.
+Seeds affect only parameter initialization, negative sampling, and dropout —
+the train/valid/test split (`x_label` in the `.inter` files) and the
+missing-item masks (`missing_items_*.npy`) are fixed files shipped with the data.
 
-### Training / Test for Missing Modality + New Item
+## Experiment runner
 
-    cd src
-    python main.py --dataset [dataset] \
-        --missing_modal 1 \
-        --new_items 1
+    python scripts/make_jobs.py --stage stageB --models all \
+        --datasets baby,sports,clothing,tiktok --seeds 999,42,2023,2024,2025 \
+        --user_metrics 1 --out jobs/stageB.jsonl
+    python scripts/run_queue.py --jobs jobs/stageB.jsonl \
+        --results results/stageB.jsonl --gpus 0,1,2,3,4,5,6,7,8
+    python scripts/make_tables.py --results results/stageB.jsonl --out results/tables/stageB
 
-This is equivalent to running the legacy `src_new_item/main.py`.
+## Baselines included
 
-### What changed in `src/`
-
-| File | Change |
+| Category | Models |
 |---|---|
-| `main.py` | Adds `--new_items` argument (default `0` = missing-only behavior). |
-| `utils/quick_start.py` | If `new_items=1`, swap in `<dataset>_del.inter` and use the new-item test split. |
-| `utils/dataset.py` | If `new_items=1`, additionally build a new-item-only test set and return `(splits, new_df)`; otherwise return the legacy 3-tuple. |
-| `utils/dataloader.py` | If `new_items=1`, exclude new items from negative sampling. |
-| `common/trainer.py` | If `new_items=1` and `missing_modal=1`, call `generate_missing_modal_infer()` / `update_adj_infer()` before validation. |
-| `common/loss.py` | `MSELoss` now takes a `weight` argument (default `0.05`); pass `0.1` for new-item mode. |
-| `utils/configurator.py` | Added a `.get(key, default)` accessor on the `Config` class (dict-style fallback used by the unified entry points). |
-| `models/dgmrec.py` | Gates the new-item-specific tensors (`image_adj_infer`, `text_adj_infer`, generation/update hooks) behind `if self.new_items`. With `new_items=0` the inference adjacency aliases the training adjacency, reproducing the legacy `src/` behavior. The MSE weight is read from `config['mse_loss_weight']` and defaults to `0.05` when `new_items=0`, `0.1` when `new_items=1`. Also fixes a latent typo in `generate_missing_modal_infer` that referenced `image_g_filter_trans`/`text_g_filter_trans` (undefined); these are renamed to `image_preference_`/`text_preference_` to match the model's actual attributes. |
+| Traditional CF | MFBPR, NGCF, LightGCN, SGL, SimGCL |
+| Multi-modal RS | VBPR, MMGCN, GRCN, SLMRec, BM3, LGMRec, LATTICE, DAMRS, MGCN, GUME |
+| Missing-modality-aware RS | MILK, SIBRAR, CI2MG |
 
-### Backup
+All baselines run through the same data loading, negative sampling, and evaluation code. Models unavailable in [MMRec](https://github.com/enoche/MMRec) (e.g., SiBraR, MILK, CI2MG) are implemented within the same pipeline. In both trees, `models/damrs.py` (class `DAMRS`) is the DA-MRS model and `models/lightgcn.py` is the standard LightGCN.
 
-The pre-unification code is preserved verbatim under `src_backup/` as a
-single tree (the legacy `src_new_item/` snapshot, which is a strict
-superset of the legacy `src/` — the only difference between the two old
-trees was new-item support):
+## TikTok reproducibility statement
 
-    src_backup/
-    ├── common/
-    ├── configs/
-    ├── main.py
-    ├── models/
-    └── utils/
+The TikTok dataset's original distribution channel has been discontinued.
+**Reproducible**: interaction data, train/valid/test split, missing-item
+masks, all configurations, and all code (this repository).
+**Not reproducible from public sources**: the raw multimodal features
+(image/text/audio embeddings). TikTok is therefore excluded from the Docker
+reproduction path.
 
-If anything goes wrong with the unified `src/`, `cd src_backup` and run
-`python main.py --dataset [dataset] --new_items 0` (missing-only) or
-`python main.py --dataset [dataset] --new_items 1` (missing + new-item)
-exactly as the old README described.
+## Citation
+
+```bibtex
+@inproceedings{kim2025dgmrec,
+  title={Disentangling and Generating Modalities for Recommendation in Missing Modality Scenarios},
+  author={Kim, Jiwan and Kang, Hongseok and Kim, Sein and Kim, Kibum and Park, Chanyoung},
+  booktitle={Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval},
+  year={2025}
+}
+```

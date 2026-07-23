@@ -1,0 +1,22 @@
+{
+  "learning_rate": [
+    0.0001
+  ],
+  "n_ui_layers": [
+    3
+  ],
+  "lamb_1": [
+    1.0
+  ],
+  "lamb_2": [
+    1.0
+  ],
+  "hyper_parameters": [
+    "lamb_1",
+    "missing_imputation",
+    "seed",
+    "n_ui_layers",
+    "learning_rate",
+    "lamb_2"
+  ]
+}

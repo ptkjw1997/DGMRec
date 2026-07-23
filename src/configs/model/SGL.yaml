@@ -1,0 +1,16 @@
+embedding_size: 64
+
+weight_size: [64, 64]
+
+learning_rate_scheduler: [0.96, 50]
+lambda_coeff: 0.9
+reg_weight: [1, 1e-02, 1e-01, 1e-03]
+
+cf_model: lightgcn
+mess_dropout: [0.1, 0.1]
+n_ui_layers: 3 # [1, 2, 3]
+knn_k: 10
+
+learning_rate: [0.001] # [0.0001, 0.0005, 0.001, 0.005]
+
+hyper_parameters: ["reg_weight", "learning_rate", "missing_imputation"]

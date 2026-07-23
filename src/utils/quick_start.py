@@ -29,6 +29,7 @@ def quick_start(model, dataset, config_dict, save_model=True):
     # New-item mode swaps in the new-item-filtered interaction file.
     if config.get('new_items'):
         config['inter_file_name'] = f'{config["dataset"]}_del.inter'
+        config['item_graph_dict_file'] = 'item_graph_dict_del.npy'
 
     logger.info(config)
 
@@ -127,6 +128,27 @@ def quick_start(model, dataset, config_dict, save_model=True):
                                                                    hyper_ret[best_test_idx][0],
                                                                    dict2str(hyper_ret[best_test_idx][1]),
                                                                    dict2str(hyper_ret[best_test_idx][2])))
+
+    # Machine-readable result dump for the experiment queue runner.
+    if config.get('result_json'):
+        import json
+        def _clean(d):
+            return {k: float(v) for k, v in d.items()}
+        payload = {
+            'model': config['model'],
+            'dataset': config['dataset'],
+            'hyper_parameters': list(config['hyper_parameters']),
+            'best_params': [str(x) for x in hyper_ret[best_test_idx][0]],
+            'best_valid': _clean(hyper_ret[best_test_idx][1]),
+            'best_test': _clean(hyper_ret[best_test_idx][2]),
+            'all_runs': [
+                {'params': [str(x) for x in p], 'valid': _clean(k), 'test': _clean(v)}
+                for (p, k, v) in hyper_ret
+            ],
+        }
+        os.makedirs(os.path.dirname(config['result_json']) or '.', exist_ok=True)
+        with open(config['result_json'], 'w') as f:
+            json.dump(payload, f, indent=2)
 
 
 
