@@ -1,7 +1,6 @@
 # coding: utf-8
 
 import os
-import random
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -27,12 +26,10 @@ class DAMRS(GeneralRecommender):
         self.reg_weight = config['reg_weight']
         self.kl_weight = config['kl_weight']
         self.neighbor_weight = config['neighbor_weight']
-        # self.gen_weight = config['gen_weight']
         self.build_item_graph = True
 
         self.n_nodes = self.n_users + self.n_items
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         self.norm_adj = self.get_norm_adj_mat().to(self.device)
         self.num_inters = torch.FloatTensor(1.0 / (self.num_inters + 1e-7)).to(self.device)
@@ -56,7 +53,6 @@ class DAMRS(GeneralRecommender):
         self.missing_imputation = config['missing_imputation']
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved ('normalize' unset in released tiktok runs -> no-op)
             if config['normalize'] :
                 self.v_feat = F.normalize(self.v_feat)
                 self.t_feat = F.normalize(self.t_feat)
@@ -73,14 +69,11 @@ class DAMRS(GeneralRecommender):
             self.audio_trs = nn.Linear(self.a_feat.shape[1], self.embedding_dim)
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (tiktok build order: delete_new_items=True graphs first)
             self.image_adj, self.text_adj, self.audio_adj = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach(), self.audio_embedding.weight.detach(), delete_new_items = True)
             self.image_adj_infer, self.text_adj_infer, self.audio_adj_infer = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach(), self.audio_embedding.weight.detach(), delete_new_items = False)
         else :
             self.image_adj_infer, self.text_adj_infer = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach(), delete_new_items = False)
             self.image_adj, self.text_adj = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach(), delete_new_items = True)
-        # self.image_adj_newitems, self.text_adj_newitems = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach())
-        # self.image_adj, self.text_adj = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach(), delete_new_items = False)
 
         dataset_path = os.path.abspath(config['data_path'] + config['dataset'])
 
@@ -89,23 +82,6 @@ class DAMRS(GeneralRecommender):
 
         __, self.session_adj = self.get_session_adj()
 
-        # # Loss Gen #
-        # # Modality Generation
-        # self.image_generator = nn.Sequential(
-        #     nn.Linear(64, 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, self.v_feat.shape[1])
-        # )
-        # self.text_generator = nn.Sequential(
-        #     nn.Linear(64, 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, self.t_feat.shape[1])
-        # )
-        # nn.init.xavier_uniform_(self.image_generator[0].weight); nn.init.xavier_uniform_(self.image_generator[2].weight)
-        # nn.init.xavier_uniform_(self.text_generator[0].weight); nn.init.xavier_uniform_(self.text_generator[2].weight)
-
-        # self.adj = self.scipy_matrix_to_sparse_tenser(self.interaction_matrix, torch.Size((self.n_users, self.n_items)))
-        # # Loss Gen #
 
     def scipy_matrix_to_sparse_tenser(self, matrix, shape):
         row = matrix.row
@@ -113,33 +89,6 @@ class DAMRS(GeneralRecommender):
         i = torch.LongTensor(np.array([row, col]))
         data = torch.FloatTensor(matrix.data)
         return torch.sparse.FloatTensor(i, data, shape).to(self.device)
-
-    # def pre_epoch_processing(self):
-    #     if self.missing_modal :
-
-    #         ego_embeddings = torch.cat((self.user_embedding.weight, self.item_id_embedding.weight), dim=0)
-    #         all_embeddings = [ego_embeddings]
-    #         for i in range(self.n_ui_layers):
-    #             side_embeddings = torch.sparse.mm(self.norm_adj, ego_embeddings)
-    #             ego_embeddings = side_embeddings
-    #             all_embeddings += [ego_embeddings]
-    #         all_embeddings = torch.stack(all_embeddings, dim=1)
-    #         all_embeddings = all_embeddings.mean(dim=1, keepdim=False)
-    #         u_g_embeddings, _ = torch.split(all_embeddings, [self.n_users, self.n_items], dim=0)
-
-    #         del ego_embeddings, side_embeddings
-
-    #         item_embs_agg = torch.sparse.mm(self.adj.t(), u_g_embeddings) * self.num_inters[self.n_users:]
-    #         image_embs_gen = self.image_generator(item_embs_agg)
-    #         text_embs_gen = self.text_generator(item_embs_agg)
-
-    #         with torch.no_grad() :
-    #             self.image_embedding.weight[self.missing_items_v] = image_embs_gen[self.missing_items_v]
-    #             self.text_embedding.weight[self.missing_items_t] = text_embs_gen[self.missing_items_t]
-
-
-    #         self.image_adj_newitems, self.text_adj_newitems = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach())
-    #         self.image_adj, self.text_adj = self.get_knn_adj_mat(self.image_embedding.weight.detach(), self.text_embedding.weight.detach(), delete_new_items = False)
 
 
     def preprocess_missing_modal(self, config) :
@@ -152,7 +101,6 @@ class DAMRS(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # 3-modality missing-mask preprocessing (dict keys: all, t, v, a, tv, ta, va)
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -169,8 +117,6 @@ class DAMRS(GeneralRecommender):
 
     def get_knn_adj_mat(self, v_embeddings, t_embeddings, a_embeddings = None, delete_new_items = True):
         if a_embeddings is not None :
-            # 3-modality historical behavior preserved (+1e-5 norm eps, imputation==1 similarity masking,
-            # audio-aware mask zeroing order; the tiktok tree's unused _random() helper is not ported)
             v_context_norm = v_embeddings.div(torch.norm(v_embeddings, p=2, dim=-1, keepdim=True) + 1e-5)
             v_sim = torch.mm(v_context_norm, v_context_norm.transpose(1, 0))
 
@@ -237,7 +183,6 @@ class DAMRS(GeneralRecommender):
             v_indices = torch.stack((torch.flatten(index_xv), torch.flatten(index_v)), 0)
             t_indices = torch.stack((torch.flatten(index_xt), torch.flatten(index_t)), 0)
             a_indices = torch.stack((torch.flatten(index_xa), torch.flatten(index_a)), 0)
-            # norm
             return self.compute_normalized_laplacian(v_indices, adj_size), self.compute_normalized_laplacian(t_indices, adj_size), self.compute_normalized_laplacian(a_indices, adj_size)
 
         v_context_norm = v_embeddings.div(torch.norm(v_embeddings, p=2, dim=-1, keepdim=True))
@@ -289,7 +234,6 @@ class DAMRS(GeneralRecommender):
 
         v_indices = torch.stack((torch.flatten(index_xv), torch.flatten(index_v)), 0)
         t_indices = torch.stack((torch.flatten(index_xt), torch.flatten(index_t)), 0)
-        # norm
         return self.compute_normalized_laplacian(v_indices, adj_size), self.compute_normalized_laplacian(t_indices, adj_size)
 
     def compute_normalized_laplacian(self, indices, adj_size):
@@ -320,7 +264,6 @@ class DAMRS(GeneralRecommender):
         index_x = torch.tensor(index_x, dtype=torch.long)
         index_y = torch.tensor(index_y, dtype=torch.long)
         indices = torch.stack((index_x, index_y), 0).to(self.device)
-        # norm
         return indices, self.compute_normalized_laplacian(indices, (self.n_items, self.n_items))
 
     def label_prediction(self, emb, aug_emb):
@@ -335,7 +278,6 @@ class DAMRS(GeneralRecommender):
 
     def generate_pesudo_labels(self, prob1, prob2, prob3, prob4 = None):
         if prob4 is not None :
-            # 3-modality historical behavior preserved (4 label sources; topk size = self.knn_k, not hardcoded 10)
             positive = prob1 + prob2 + prob3 + prob4 + prob4
             _ , mm_pos_ind = torch.topk(positive, self.knn_k, dim=-1)
             prob = prob4.clone()
@@ -364,7 +306,6 @@ class DAMRS(GeneralRecommender):
 
         emb2 = torch.reshape(n_emb, [-1, 1, self.embedding_dim])
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (tile size = self.knn_k, not hardcoded 10)
             emb2 = torch.tile(emb2, [1, self.knn_k, 1])
         else :
             emb2 = torch.tile(emb2, [1, 10, 1])
@@ -375,11 +316,10 @@ class DAMRS(GeneralRecommender):
 
         mm_pos_score = torch.sum(torch.exp(mm_pos_score / temperature), dim=1)
         s_pos_score = torch.sum(torch.exp(s_pos_score / temperature), dim=1)
-        ttl_score = torch.exp(ttl_score / temperature).sum(dim=1) # 1
+        ttl_score = torch.exp(ttl_score / temperature).sum(dim=1)
 
         cl_loss = - torch.log(mm_pos_score / (ttl_score) + 10e-10) - torch.log(s_pos_score / (ttl_score - mm_pos_score) + 10e-10)
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (returns per-item vector; caller masks by tva_index then averages)
             return cl_loss
         return torch.mean(cl_loss)
 
@@ -396,18 +336,14 @@ class DAMRS(GeneralRecommender):
                              [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col),
                                   [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
-        # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
         self.num_inters = sumArr
-        # add epsilon to avoid Devide by zero Warning
         diag = np.array(sumArr.flatten())[0] + 1e-7
         diag = np.power(diag, -0.5)
         D = sp.diags(diag)
         L = D * A * D
-        # covert norm_adj matrix to tensor
         L = sp.coo_matrix(L)
         row = L.row
         col = L.col
@@ -435,24 +371,20 @@ class DAMRS(GeneralRecommender):
         else :
             text_adj, image_adj = self.text_adj, self.image_adj
 
-        # text emb
         h_t = self.item_id_embedding.weight.clone()
         for i in range(self.n_layers):
             h_t = torch.sparse.mm(text_adj, h_t)
 
-        # image emb
         h_v = self.item_id_embedding.weight.clone()
         for i in range(self.n_layers):
             h_v = torch.sparse.mm(image_adj, h_v)
 
         if self.a_feat is not None:
-            # audio emb
             audio_adj = self.audio_adj_infer if infer else self.audio_adj
             h_a = self.item_id_embedding.weight.clone()
             for i in range(self.n_layers):
                 h_a = torch.sparse.mm(audio_adj, h_a)
 
-        # session emb
         h_s = self.item_id_embedding.weight.clone()
         for i in range(self.n_layers):
             h_s = torch.sparse.mm(self.session_adj, h_s)
@@ -467,8 +399,6 @@ class DAMRS(GeneralRecommender):
         neg_items = interaction[2]
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: only tva_index is consumed below
-            # (the tiktok tree's unused t/v/a/tv/ta/va index arrays are not ported)
             if self.missing_modal :
                 tva_index = np.setdiff1d(pos_items.detach().cpu().numpy(), np.union1d(np.union1d(self.missing_items_t, self.missing_items_v), self.missing_items_a))
             else :
@@ -481,39 +411,20 @@ class DAMRS(GeneralRecommender):
             user_embeddings, item_embeddings, h_t, h_v, h_s, h_a = self.forward(infer = False)
         else :
             user_embeddings, item_embeddings, h_t, h_v, h_s = self.forward(infer = False)
-        # Loss Gen #
-        # item_embs_agg = torch.sparse.mm(self.adj.t(), user_embeddings) * self.num_inters[self.n_users:]
-        # image_embs_gen = self.image_generator(item_embs_agg)
-        # text_embs_gen = self.text_generator(item_embs_agg)
-        # unique_item_id, inverse = torch.unique(torch.cat((pos_items, neg_items)), return_inverse = True, sorted=False)
-        # unique_item_id= unique_item_id.detach().cpu().numpy()
 
-        # if self.missing_modal :
-        #     complete_idx = np.isin(unique_item_id, self.complete_items)
-        # else :
-        #     complete_idx = np.ones_like(unique_item_id, dtype = 'bool')
-
-        # loss_gen = F.mse_loss(self.image_embedding.weight[unique_item_id][complete_idx], image_embs_gen[unique_item_id][complete_idx])
-        # loss_gen += F.mse_loss(self.text_embedding.weight[unique_item_id][complete_idx], text_embs_gen[unique_item_id][complete_idx])
-        # Loss Gen #
 
         u_idx = torch.unique(users, return_inverse=True, sorted=False)
         i_idx = torch.unique(torch.cat((pos_items, neg_items)), return_inverse=True, sorted=False)
         u_id = u_idx[0]
         i_id = i_idx[0]
 
-        # text
         label_prediction_t = self.label_prediction(h_t[i_id], h_t)
-        # visual
         label_prediction_v = self.label_prediction(h_v[i_id], h_v)
-        # session
         label_prediction_s = self.label_prediction(h_s[i_id], h_s)
 
         if self.a_feat is not None:
-            # audio
             label_prediction_a = self.label_prediction(h_a[i_id], h_a)
 
-            # 3-modality historical behavior preserved (4-way pseudo labels, tva_index masking, *0.5/4.0 scaling)
             mm_postive_s, s_postive_s = self.generate_pesudo_labels(label_prediction_t, label_prediction_v, label_prediction_a, label_prediction_s)
             neighbor_dis_loss_1 = self.neighbor_discrimination(mm_postive_s, s_postive_s, h_s[i_id], h_s)
             neighbor_dis_loss_1 = torch.mean(neighbor_dis_loss_1[np.isin(i_id.cpu().numpy(), tva_index)])
@@ -545,7 +456,7 @@ class DAMRS(GeneralRecommender):
 
         n_u_g_embeddings = user_embeddings[u_id]
         if self.a_feat is not None:
-            it_embeddings = (h_t + h_v + h_a + h_s)/4.0 # (h_t + h_v+ h_a)/3.0
+            it_embeddings = (h_t + h_v + h_a + h_s)/4.0
         else :
             it_embeddings = (h_t + h_s + h_v)/3.0
 
@@ -561,7 +472,7 @@ class DAMRS(GeneralRecommender):
 
         u_g_embeddings = user_embeddings[users]
         if self.a_feat is not None:
-            ia_embeddings = item_embeddings + (h_t + h_v+ h_a + h_s)/4.0 # (h_t + h_v+ h_a) /3.0 #
+            ia_embeddings = item_embeddings + (h_t + h_v+ h_a + h_s)/4.0
         else :
             ia_embeddings = item_embeddings + (h_t + h_v + h_s)/3.0
         pos_i_g_embeddings = ia_embeddings[pos_items]
@@ -569,19 +480,19 @@ class DAMRS(GeneralRecommender):
 
         batch_mf_loss = self.bpr_loss(u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings, p_weight, n_weight)
 
-        return batch_mf_loss + self.neighbor_weight * (neighbor_dis_loss) + KL_loss * self.kl_weight #+ loss_gen * self.gen_weight
+        return batch_mf_loss + self.neighbor_weight * (neighbor_dis_loss) + KL_loss * self.kl_weight
 
 
     def full_sort_predict(self, interaction):
         user = interaction[0]
         if self.a_feat is not None:
-            user_embeddings, item_embeddings, h_t, h_v, h_s, h_a = self.forward(infer = True) #
+            user_embeddings, item_embeddings, h_t, h_v, h_s, h_a = self.forward(infer = True)
         else :
-            user_embeddings, item_embeddings, h_t, h_v, h_s = self.forward(infer = True) #
+            user_embeddings, item_embeddings, h_t, h_v, h_s = self.forward(infer = True)
 
         user_e = user_embeddings[user, :]
         if self.a_feat is not None:
-            i_embedding = (h_t + h_v+ h_a+ h_s)/4.0 # ) /3.0 #
+            i_embedding = (h_t + h_v+ h_a+ h_s)/4.0
         else :
             i_embedding = (h_v+ h_t+ h_s)/ 3.0
         all_item_e = item_embeddings + i_embedding
@@ -620,7 +531,7 @@ class DAMRS(GeneralRecommender):
         n_mean_value = torch.mean(n_tensor).data
 
         p_mean_probability = torch.pow(p_mean_value, 1.0).data
-        p_var_probability = torch.pow(torch.exp(-p_variance).data, 2.0) # 0 ~ 1
+        p_var_probability = torch.pow(torch.exp(-p_variance).data, 2.0)
         pos_weight = p_mean_probability * p_var_probability
         pos_weight = torch.clamp(pos_weight, 0, 1).data
 
@@ -629,7 +540,6 @@ class DAMRS(GeneralRecommender):
 
         neg_weight_max = torch.pow((p_max_value - n_mean_value.data), 1.0) * mask
         neg_weight = torch.clamp(neg_weight_max, 0, 1).data
-        # print(neg_weight)
 
         return pos_weight, neg_weight
 
@@ -640,5 +550,4 @@ class DAMRS(GeneralRecommender):
         p_maxi = torch.log(F.sigmoid(pos_scores - neg_scores)) * p_weight
         n_maxi = torch.log(F.sigmoid(neg_scores - pos_scores)) * n_weight
         mf_loss = -torch.mean(p_maxi + n_maxi)
-        # mf_loss = -torch.sum(maxi)
         return mf_loss

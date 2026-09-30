@@ -1,19 +1,10 @@
 # coding: utf-8
-"""
-MMGCN: Multi-modal Graph Convolution Network for Personalized Recommendation of Micro-video. 
-In ACM MM`19,
-"""
 
 import os
 import numpy as np
-import scipy.sparse as sp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# torch_geometric is only needed for the 3-modality (tiktok) path, which uses a
-# MessagePassing-based BaseModel (see BaseModelPyG below). The 2-modality path
-# never touches it, so the import is guarded to keep 2-modality runs working in
-# environments without torch_geometric.
 try:
     from torch_geometric.nn.conv import MessagePassing
     import torch_geometric
@@ -22,8 +13,6 @@ except ImportError:
     torch_geometric = None
 
 from common.abstract_recommender import GeneralRecommender
-from common.loss import BPRLoss, EmbLoss
-from common.init import xavier_uniform_initialization
 
 
 class MMGCN(GeneralRecommender):
@@ -35,14 +24,13 @@ class MMGCN(GeneralRecommender):
         num_item = self.n_items
         dim_x = config['embedding_size']
         num_layer = config['n_layers']
-        batch_size = config['train_batch_size']         # not used
+        batch_size = config['train_batch_size']
         self.aggr_mode = 'mean'
         self.concate = 'False'
         has_id = True
         self.weight = torch.tensor([[1.0], [-1.0]]).to(self.device)
         self.reg_weight = config['reg_weight']
 
-        # packing interaction in training into edge_index
         train_interactions = dataset.inter_matrix(form='coo').astype(np.float32)
         edge_index = torch.tensor(self.pack_edge_index(train_interactions), dtype=torch.long)
         self.edge_index = edge_index.t().contiguous().to(self.device)
@@ -50,9 +38,6 @@ class MMGCN(GeneralRecommender):
         self.num_modal = 0
 
         if self.a_feat is None:
-            # 2-modality (Amazon) tree only: the 3-modality tiktok tree had no
-            # new-items / missing-modal preprocessing in MMGCN at all.
-            # 3-modality historical behavior preserved
             self.new_items = config['new_items']
             if config['new_items'] :
                 self.new_items_set = np.load(f"../data/{config['dataset']}/new_items.npy")
@@ -68,10 +53,6 @@ class MMGCN(GeneralRecommender):
             if config['missing_modal'] :
                 self.preprocess_missing_modal(config)
 
-        # The 3-modality tiktok tree used a torch_geometric MessagePassing
-        # BaseModel (different init bounds, no bias, no output normalization);
-        # the 2-modality tree uses the vectorized BaseModel below.
-        # 3-modality historical behavior preserved
         base_model_cls = BaseModel if self.a_feat is None else BaseModelPyG
 
         if self.v_feat is not None:
@@ -123,7 +104,6 @@ class MMGCN(GeneralRecommender):
     def pack_edge_index(self, inter_mat):
         rows = inter_mat.row
         cols = inter_mat.col + self.n_users
-        # ndarray([598918, 2]) for ml-imdb
         return np.column_stack((rows, cols))
 
     def forward(self):
@@ -158,7 +138,7 @@ class MMGCN(GeneralRecommender):
         user_score = out[user_tensor]
         item_score = out[item_tensor]
         score = torch.sum(user_score * item_score, dim=1).view(-1, 2)
-        loss = -torch.mean(torch.log(torch.sigmoid(torch.matmul(score, self.weight)))) # weight 就是label
+        loss = -torch.mean(torch.log(torch.sigmoid(torch.matmul(score, self.weight))))
 
         reg_embedding_loss = (self.id_embedding[user_tensor]**2 + self.id_embedding[item_tensor]**2).mean()
         if self.v_feat is not None:
@@ -169,8 +149,6 @@ class MMGCN(GeneralRecommender):
             reg_embedding_loss += (self.a_gcn.preference**2).mean()
         reg_loss = self.reg_weight * reg_embedding_loss
         if self.a_feat is None:
-            # the tiktok tree had no per-step loss print
-            # (3-modality historical behavior preserved)
             print(f"Loss : {loss:.4f}")
         return loss + reg_loss
 
@@ -204,7 +182,6 @@ class GCN(torch.nn.Module):
 
         if self.dim_latent:
             self.preference = nn.init.xavier_normal_(torch.rand((num_user, self.dim_latent), requires_grad=True)).to(self.device)
-            #self.preference = nn.Parameter(nn.init.xavier_normal_(torch.rand((num_user, self.dim_latent))))
 
             self.MLP = nn.Linear(self.dim_feat, self.dim_latent)
             self.conv_embed_1 = base_model_cls(self.dim_latent, self.dim_latent, aggr=self.aggr_mode)
@@ -217,7 +194,6 @@ class GCN(torch.nn.Module):
 
         else:
             self.preference = nn.init.xavier_normal_(torch.rand((num_user, self.dim_feat), requires_grad=True)).to(self.device)
-            #self.preference = nn.Parameter(nn.init.xavier_normal_(torch.rand((num_user, self.dim_feat))))
 
             self.conv_embed_1 = base_model_cls(self.dim_feat, self.dim_feat, aggr=self.aggr_mode)
             nn.init.xavier_normal_(self.conv_embed_1.weight)
@@ -247,21 +223,21 @@ class GCN(torch.nn.Module):
         x = torch.cat((self.preference, temp_features), dim=0)
         x = F.normalize(x)
 
-        h = F.leaky_relu(self.conv_embed_1(x, self.edge_index))  # equation 1
+        h = F.leaky_relu(self.conv_embed_1(x, self.edge_index))
         x_hat = F.leaky_relu(self.linear_layer1(x)) + id_embedding if self.has_id else F.leaky_relu(
-            self.linear_layer1(x))  # equation 5
+            self.linear_layer1(x))
         x = F.leaky_relu(self.g_layer1(torch.cat((h, x_hat), dim=1))) if self.concate else F.leaky_relu(
             self.g_layer1(h) + x_hat)
 
-        h = F.leaky_relu(self.conv_embed_2(x, self.edge_index))  # equation 1
+        h = F.leaky_relu(self.conv_embed_2(x, self.edge_index))
         x_hat = F.leaky_relu(self.linear_layer2(x)) + id_embedding if self.has_id else F.leaky_relu(
-            self.linear_layer2(x))  # equation 5
+            self.linear_layer2(x))
         x = F.leaky_relu(self.g_layer2(torch.cat((h, x_hat), dim=1))) if self.concate else F.leaky_relu(
             self.g_layer2(h) + x_hat)
 
-        h = F.leaky_relu(self.conv_embed_3(x, self.edge_index))  # equation 1
+        h = F.leaky_relu(self.conv_embed_3(x, self.edge_index))
         x_hat = F.leaky_relu(self.linear_layer3(x)) + id_embedding if self.has_id else F.leaky_relu(
-            self.linear_layer3(x))  # equation 5
+            self.linear_layer3(x))
         x = F.leaky_relu(self.g_layer3(torch.cat((h, x_hat), dim=1))) if self.concate else F.leaky_relu(
             self.g_layer3(h) + x_hat)
 
@@ -285,21 +261,17 @@ class BaseModel(nn.Module):
             nn.init.zeros_(self.bias)
 
     def forward(self, x, edge_index):
-        """Perform the forward pass."""
-        # Linear transformation
         x = torch.matmul(x, self.weight)
         if self.bias is not None:
             x += self.bias
 
-        # Aggregate neighbors (vectorized; equivalent to `out[i] += x[j]`
-        # over all edges, which as a Python loop is ~1000x slower)
         row, col = edge_index
         out = torch.zeros_like(x)
         out.index_add_(0, row, x[col])
 
         if self.aggr == 'mean':
             degree = torch.bincount(row, minlength=x.size(0))
-            degree[degree == 0] = 1  # Avoid division by zero
+            degree[degree == 0] = 1
             out = out / degree.view(-1, 1)
 
         if self.normalize:
@@ -312,9 +284,6 @@ class BaseModel(nn.Module):
 
 if MessagePassing is not None:
     class BaseModelPyG(MessagePassing):
-        # 3-modality historical behavior preserved: this is the tiktok tree's
-        # BaseModel verbatim (torch_geometric uniform init, no bias, no output
-        # normalization), used only when a_feat is not None.
         def __init__(self, in_channels, out_channels, normalize=True, bias=True, aggr='add', **kwargs):
             super(BaseModelPyG, self).__init__(aggr=aggr, **kwargs)
             self.aggr = aggr

@@ -1,14 +1,7 @@
 # coding: utf-8
-r"""
-MF-BPR
-################################################
+"""MF-BPR
 Reference:
     Steffen Rendle et al. "BPR: Bayesian Personalized Ranking from Implicit Feedback." in UAI 2009.
-
-Plain matrix-factorization BPR (no multimodal features). Serves as the
-traditional CF baseline; it is unaffected by missing modalities by
-construction. (The previous file under this name was the DA-MRS framework
-with an MF backbone and has been preserved as damrs_mf_backbone.py.bak.)
 """
 
 import torch

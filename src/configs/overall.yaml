@@ -1,9 +1,7 @@
-# general
 gpu_id: 0
 use_gpu: True
 seed: [999]
 
-# multi-modal raw features
 data_path: '../data/'
 inter_splitting_label: 'x_label'
 filter_out_cod_start_users: True
@@ -17,7 +15,6 @@ embedding_size: 64
 weight_decay: 0.0
 req_training: True
 
-# training settings
 epochs: 500
 stopping_step: 25
 train_batch_size: 2048
@@ -36,7 +33,6 @@ ITEM_ID_FIELD: item_id:token
 TIME_FIELD: timestamp:float
 field_separator: "\t"
 
-# evaluation settings
 metrics: ["Recall", "NDCG"]
 topk: [10, 20, 50]
 valid_metric: Recall@20
@@ -59,5 +55,4 @@ save_best_model: False
 missing_imputation: [1]
 missing_ratio: 0.666
 
-# iteration parameters
 hyper_parameters: ["seed"]

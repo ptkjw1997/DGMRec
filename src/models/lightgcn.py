@@ -1,12 +1,7 @@
 # coding: utf-8
-r"""
-LightGCN
-################################################
+"""LightGCN
 Reference:
     Xiangnan He et al. "LightGCN: Simplifying and Powering Graph Convolution Network for Recommendation." in SIGIR 2020.
-
-Plain collaborative-filtering LightGCN (no multimodal features). Serves as the
-traditional CF baseline; it is unaffected by missing modalities by construction.
 """
 
 import numpy as np
@@ -46,7 +41,6 @@ class LightGCN(GeneralRecommender):
         inter_M_t = self.interaction_matrix.transpose()
         data_dict = dict(zip(zip(inter_M.row, inter_M.col + self.n_users), [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col), [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
 

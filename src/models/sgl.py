@@ -1,7 +1,5 @@
 # coding: utf-8
 
-import os
-import random
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -9,8 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from common.abstract_recommender import GeneralRecommender
-from common.loss import BPRLoss, EmbLoss, L2Loss
-from utils.utils import build_sim, compute_normalized_laplacian
 
 
 class SGL(GeneralRecommender):
@@ -24,7 +20,6 @@ class SGL(GeneralRecommender):
 
         self.n_nodes = self.n_users + self.n_items
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         self.norm_adj = self.get_norm_adj_mat().to(self.device)
 
@@ -44,8 +39,6 @@ class SGL(GeneralRecommender):
         else :
             self.new_items_set = self.old_items_set = np.arange(self.n_items)
 
-        # if config['missing_modal'] :
-        #     self.preprocess_missing_modal(config)
         self.missing_modal = config['missing_modal']
         self.missing_imputation = config['missing_imputation']
         self.missing_generation = config['missing_generation']
@@ -59,17 +52,13 @@ class SGL(GeneralRecommender):
                              [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col),
                                   [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
-        # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
-        # add epsilon to avoid Devide by zero Warning
         diag = np.array(sumArr.flatten())[0] + 1e-7
         diag = np.power(diag, -0.5)
         D = sp.diags(diag)
         L = D * A * D
-        # covert norm_adj matrix to tensor
         L = sp.coo_matrix(L)
         row = L.row
         col = L.col
@@ -81,12 +70,9 @@ class SGL(GeneralRecommender):
     def edge_drop(self, dropout):
         degree_len = int(self.edge_values.size(0) * (1. - dropout))
         degree_idx = torch.multinomial(self.edge_values, degree_len)
-        # random sample
         keep_indices = self.edge_indices[:, degree_idx]
-        # norm values
         keep_values = self._normalize_adj_m(keep_indices, torch.Size((self.n_users, self.n_items)))
         all_values = torch.cat((keep_values, keep_values))
-        # update keep_indices to users/items+self.n_users
         keep_indices[1] += self.n_users
         all_indices = torch.cat((keep_indices, torch.flip(keep_indices, [0])), 1)
         return torch.sparse.FloatTensor(all_indices, all_values, self.norm_adj.shape).to(self.device)
@@ -106,7 +92,6 @@ class SGL(GeneralRecommender):
         rows = torch.from_numpy(self.interaction_matrix.row)
         cols = torch.from_numpy(self.interaction_matrix.col)
         edges = torch.stack([rows, cols]).type(torch.LongTensor)
-        # edge normalized values
         values = self._normalize_adj_m(edges, torch.Size((self.n_users, self.n_items)))
         return edges, values
 
@@ -146,7 +131,6 @@ class SGL(GeneralRecommender):
         batch_mf_loss = self.bpr_loss(u_g_embeddings, pos_i_g_embeddings,
                                                                       neg_i_g_embeddings)
 
-        # adj
         adj_1 = self.edge_drop(0.1)
         adj_2 = self.edge_drop(0.2)
         ua_embeddings_1, ia_embeddings_1 = self.forward(adj_1)
@@ -185,7 +169,5 @@ class SGL(GeneralRecommender):
         restore_user_e, restore_item_e = self.forward(self.norm_adj)
         u_embeddings = restore_user_e[user]
 
-        # dot with all item embedding to accelerate
         scores = torch.matmul(u_embeddings, restore_item_e.transpose(0, 1))
         return scores
-

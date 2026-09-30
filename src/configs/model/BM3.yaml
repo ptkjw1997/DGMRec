@@ -8,7 +8,6 @@ cl_weight: 2.0
 
 use_neg_sampling: False
 
-# Missing Modality Setting
 missing_modal : 0
 missing_imputation : [0]
 

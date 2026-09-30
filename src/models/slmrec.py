@@ -6,17 +6,12 @@ import numpy as np
 import scipy.sparse as sp
 import os
 
-# from torch_scatter import scatter
-from sklearn.cluster import KMeans
 from common.abstract_recommender import GeneralRecommender
 
-## Only visual + text features
-##
 
 class SLMRec(GeneralRecommender):
     def __init__(self, config, dataset):
         super(SLMRec, self).__init__(config, dataset)
-        # self.a_feat = None      # no audio feature  (a_feat comes from GeneralRecommender; None for 2-modality datasets)
         self.config = config
         self.infonce_criterion = nn.CrossEntropyLoss()
 
@@ -57,7 +52,6 @@ class SLMRec(GeneralRecommender):
         self.f = nn.Sigmoid()
 
         if self.config["ssl_task"] == "FAC":
-            # Fine and Coarse
             self.g_i_iv = nn.Linear(self.latent_dim, self.latent_dim)
             self.g_v_iv = nn.Linear(self.latent_dim, self.latent_dim)
             self.g_iv_iva = nn.Linear(self.latent_dim, self.latent_dim)
@@ -72,13 +66,11 @@ class SLMRec(GeneralRecommender):
             nn.init.xavier_uniform_(self.g_t_ivat.weight)
             self.ssl_temp = self.config["ssl_temp"]
         elif self.config["ssl_task"] in ["FD", "FD+FM"]:
-            # Feature dropout
             self.ssl_criterion = nn.CrossEntropyLoss()
             self.ssl_temp = self.config["ssl_temp"]
             self.dropout_rate = self.config["dropout_rate"]
             self.dropout = nn.Dropout(p=self.dropout_rate)
         elif self.config["ssl_task"] == "FM":
-            # Feature Masking
             self.ssl_criterion = nn.CrossEntropyLoss()
             self.ssl_temp = self.config["ssl_temp"]
 
@@ -92,7 +84,6 @@ class SLMRec(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # 3-modality historical behavior preserved: items_tv not set; triple-union complete_items
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -116,13 +107,13 @@ class SLMRec(GeneralRecommender):
         items_emb = self.embedding_item.weight
 
         if self.v_feat is not None:
-            self.v_dense_emb = self.v_dense(self.v_feat)  # v=>id
+            self.v_dense_emb = self.v_dense(self.v_feat)
             
         if self.config["dataset"] != "kwai":
             if self.a_feat is not None:
-                self.a_dense_emb = self.a_dense(self.a_feat)  # a=>id
+                self.a_dense_emb = self.a_dense(self.a_feat)
             if self.t_feat is not None:
-                self.t_dense_emb = self.t_dense(self.t_feat)  # t=>id
+                self.t_dense_emb = self.t_dense(self.t_feat)
 
         def compute_graph(u_emb, i_emb):
             all_emb = torch.cat([u_emb, i_emb])
@@ -147,7 +138,6 @@ class SLMRec(GeneralRecommender):
                 self.t_emb = compute_graph(users_emb, self.t_dense_emb)
                 self.t_emb_u, self.t_emb_i = torch.split(self.t_emb, [self.num_users, self.num_items])
 
-        # multi - modal features fusion
         if self.config["dataset"] == "kwai":
             user = self.embedding_user_after_GCN(
                 self.mm_fusion([self.i_emb_u, self.v_emb_u]))
@@ -176,7 +166,6 @@ class SLMRec(GeneralRecommender):
             all_emb = torch.cat([u_emb, i_emb])
             ego_emb_sub_1 = all_emb
             ego_emb_sub_2 = all_emb
-            # embs = [all_emb]
             embs_sub_1 = [ego_emb_sub_1]
             embs_sub_2 = [ego_emb_sub_2]
 
@@ -339,18 +328,11 @@ class SLMRec(GeneralRecommender):
         v_logits /= self.ssl_temp
         v_labels = torch.tensor(list(range(x_i_iv.shape[0]))).to(self.device)
         if self.a_feat is not None :
-            # 3-modality historical behavior preserved: no missing-modal index masking in fac
             v_loss = self.infonce_criterion(v_logits, v_labels)
         else :
             v_loss = self.infonce_criterion(v_logits[v_index], v_labels[v_index])
         if self.config["dataset"] != "kwai":
             x_iv_iva = self.g_iv_iva(x_i_iv)
-            # x_a_iva = self.g_a_iva(self.a_emb_i[idx])
-            # a_logits = torch.mm(x_iv_iva, x_a_iva.T)
-            # a_logits /= self.ssl_temp
-            # a_labels = torch.tensor(list(range(x_iv_iva.shape[0]))).to(self.device)
-            # a_loss = self.infonce_criterion(a_logits, a_labels)
-            #
             x_iva_ivat = self.g_iva_ivat(x_iv_iva)
             x_t_ivat = self.g_t_ivat(self.t_emb_i[idx])
 
@@ -358,12 +340,10 @@ class SLMRec(GeneralRecommender):
             t_logits /= self.ssl_temp
             t_labels = torch.tensor(list(range(x_iva_ivat.shape[0]))).to(self.device)
             if self.a_feat is not None :
-                # 3-modality historical behavior preserved: no missing-modal index masking in fac
                 t_loss = self.infonce_criterion(t_logits, t_labels)
             else :
                 t_loss = self.infonce_criterion(t_logits[t_index], t_labels[t_index])
 
-            #return v_loss + a_loss + t_loss
             return v_loss + t_loss
         else:
             return v_loss
@@ -394,14 +374,12 @@ class SLMRec(GeneralRecommender):
         return users_emb, pos_emb, neg_emb, users_emb_ego, pos_emb_ego, neg_emb_ego
 
     def calculate_loss(self, interaction):
-        # multi-task loss
         users, pos = interaction[0], interaction[1]
         main_loss = self.infonce(users, pos)
         ssl_loss = self.compute_ssl(users, pos)
         return main_loss + self.config['ssl_alpha'] * ssl_loss
 
     def ssl_loss(self, users, pos):
-        # compute ssl loss
         self.getEmbedding(users.long(), pos.long(), None)
         return self.compute_ssl(users, pos)
 
@@ -439,7 +417,7 @@ class SLMRec(GeneralRecommender):
         logits /= self.temp
         labels = torch.tensor(list(range(users_emb.shape[0]))).to(self.device)
 
-        return self.infonce_criterion(logits, labels) # crossentropy
+        return self.infonce_criterion(logits, labels)
 
     def create_u_embeding_i(self):
         self.embedding_user = torch.nn.Embedding(num_embeddings=self.num_users, embedding_dim=self.latent_dim)
@@ -452,7 +430,6 @@ class SLMRec(GeneralRecommender):
             nn.init.normal_(self.embedding_user.weight, std=0.1)
             nn.init.normal_(self.embedding_item_ID.weight, std=0.1)
 
-        # load features, updated by enoche
         mul_modal_cnt = 0
         if self.v_feat is not None:
             self.v_feat = torch.nn.functional.normalize(self.v_feat, dim=1)
@@ -464,35 +441,14 @@ class SLMRec(GeneralRecommender):
             self.t_dense = nn.Linear(self.t_feat.shape[1], self.latent_dim)
             nn.init.xavier_uniform_(self.t_dense.weight)
             mul_modal_cnt += 1
-            # if self.config["dataset"] != "kwai":
-            #     if self.a_feat is not None:
-            #         self.a_feat = torch.nn.functional.normalize(self.a_feat, dim=1)
-            #     if self.config["dataset"] == "tiktok":
-            #         self.words_tensor = self.dataset.words_tensor.to(self.device)
-            #         self.word_embedding = torch.nn.Embedding(11574, 128).to(self.device)
-            #         torch.nn.init.xavier_normal_(self.word_embedding.weight)
-            #         self.t_feat = scatter(self.word_embedding(self.words_tensor[1]), self.words_tensor[0], reduce='mean',
-            #                               dim=0).to(self.device)
-            #     else:
-            #         self.t_feat = torch.nn.functional.normalize(self.dataset.t_feat.to(self.device).float(), dim=1)
         if self.a_feat is not None :
             self.a_feat = torch.nn.functional.normalize(self.a_feat, dim = 1)
             self.a_dense = nn.Linear(self.a_feat.shape[1], self.latent_dim)
             nn.init.xavier_uniform_(self.a_dense.weight)
             mul_modal_cnt += 1
-        # visual feature dense
-        # if self.config["data.input.dataset"] != "kwai":
-        #     # acoustic feature dense
-        #     self.a_dense = nn.Linear(self.a_feat.shape[1], self.latent_dim)
-        #     # textual feature dense
-        #     self.t_dense = nn.Linear(self.t_feat.shape[1], self.latent_dim)
 
         self.item_feat_dim = self.latent_dim * (mul_modal_cnt + 1)
 
-        # nn.init.xavier_uniform_(self.v_dense.weight)
-        # if self.config["data.input.dataset"] != "kwai":
-        #     nn.init.xavier_uniform_(self.a_dense.weight)
-        #     nn.init.xavier_uniform_(self.t_dense.weight)
 
         self.embedding_item_after_GCN = nn.Linear(self.item_feat_dim, self.latent_dim)
         self.embedding_user_after_GCN = nn.Linear(self.item_feat_dim, self.latent_dim)
@@ -501,9 +457,6 @@ class SLMRec(GeneralRecommender):
 
     def create_adj_mat(self, interaction_csr):
         user_np, item_np = interaction_csr.nonzero()
-        # user_list, item_list = self.dataset.get_train_interactions()
-        # user_np = np.array(user_list, dtype=np.int32)
-        # item_np = np.array(item_list, dtype=np.int32)
         ratings = np.ones_like(user_np, dtype=np.float32)
         n_nodes = self.num_users + self.num_items
         tmp_adj = sp.csr_matrix((ratings, (user_np, item_np + self.num_users)), shape=(n_nodes, n_nodes))
@@ -530,8 +483,7 @@ class SLMRec(GeneralRecommender):
             adj_matrix = normalized_adj_single(adj_mat)
             print('use the gcmc adjacency matrix')
         elif adj_type == 'pre':
-            # pre adjcency matrix
-            rowsum = np.array(adj_mat.sum(1)) + 1e-08    # avoid RuntimeWarning: divide by zero encountered in power
+            rowsum = np.array(adj_mat.sum(1)) + 1e-08
             d_inv = np.power(rowsum, -0.5).flatten()
             d_inv[np.isinf(d_inv)] = 0.
             d_mat_inv = sp.diags(d_inv)
@@ -545,4 +497,3 @@ class SLMRec(GeneralRecommender):
             print('use the mean adjacency matrix')
 
         return adj_matrix
-

@@ -1,8 +1,5 @@
 # coding: utf-8
-# @email: y463213402@gmail.com
-r"""
-MGCN
-################################################
+"""MGCN
 Reference:
     https://github.com/demonph10/MGCN
     ACM MM'2023: [Multi-View Graph Convolutional Network for Multimedia Recommendation]
@@ -16,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from common.abstract_recommender import GeneralRecommender
-from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neighbourhood, build_knn_normalized_graph
+from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neighbourhood
 
 
 class MGCN(GeneralRecommender):
@@ -30,7 +27,6 @@ class MGCN(GeneralRecommender):
         self.n_layers = config['n_layers']
         self.reg_weight = config['reg_weight']
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
 
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_dim)
@@ -70,7 +66,6 @@ class MGCN(GeneralRecommender):
                 image_adj[self.missing_items_v, :] = image_adj[:, self.missing_items_v] = 0.0
                 image_adj[self.missing_items_v, self.missing_items_v] = 1.0
             image_adj = build_knn_neighbourhood(image_adj, topk=self.knn_k)
-            # image_adj = build_knn_normalized_graph(image_adj, topk=self.knn_k, is_sparse=self.sparse,norm_type='sym')
             image_adj = compute_normalized_laplacian(image_adj)
 
             image_adj = image_adj.to_sparse_coo()
@@ -83,10 +78,6 @@ class MGCN(GeneralRecommender):
                 image_adj = build_knn_neighbourhood(image_adj, topk=self.knn_k)
                 image_adj = compute_normalized_laplacian(image_adj).to_sparse_coo()
                 self.image_original_adj_newitems = image_adj.cuda()
-            # image_adj = build_sim(self.image_embedding.weight.detach())
-            # image_adj = build_knn_normalized_graph(image_adj, topk=self.knn_k, is_sparse=self.sparse,
-            #                                         norm_type='sym')
-            # self.image_original_adj = image_adj.cuda()
 
         if self.t_feat is not None:
             self.text_embedding = nn.Embedding.from_pretrained(self.t_feat, freeze=False)
@@ -95,7 +86,6 @@ class MGCN(GeneralRecommender):
             if self.missing_modal :
                 text_adj[self.missing_items_t, :] = text_adj[:, self.missing_items_t] = 0.0
                 text_adj[self.missing_items_t, self.missing_items_t] = 1.0
-            # text_adj = build_knn_normalized_graph(text_adj, topk=self.knn_k, is_sparse=self.sparse, norm_type='sym')
             text_adj = build_knn_neighbourhood(text_adj, topk=self.knn_k)
             text_adj = compute_normalized_laplacian(text_adj)
 
@@ -110,9 +100,6 @@ class MGCN(GeneralRecommender):
                 text_adj = compute_normalized_laplacian(text_adj).to_sparse_coo()
                 self.text_original_adj_newitems = text_adj.cuda()
 
-            # text_adj = build_sim(self.text_embedding.weight.detach())
-            # text_adj = build_knn_normalized_graph(text_adj, topk=self.knn_k, is_sparse=self.sparse, norm_type='sym')
-            # self.text_original_adj = text_adj.cuda()
 
         if self.a_feat is not None:
             self.audio_embedding = nn.Embedding.from_pretrained(self.a_feat, freeze=False)
@@ -193,7 +180,6 @@ class MGCN(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items:
-            # 3-modality (tiktok) masks: keys {all, t, v, a, tv, ta, va}
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -203,7 +189,6 @@ class MGCN(GeneralRecommender):
 
             self.complete_items = np.setdiff1d(np.arange(self.n_items), np.union1d(np.union1d(self.missing_items_v, self.missing_items_t), self.missing_items_a))
         else:
-            # 2-modality (Amazon) masks: keys {all, t, v}
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v']))
             self.complete_items = np.setdiff1d(np.arange(self.n_items), np.union1d(self.missing_items_v, self.missing_items_t))
@@ -234,19 +219,14 @@ class MGCN(GeneralRecommender):
 
             norm_adj = d_mat_inv.dot(adj_mat)
             norm_adj = norm_adj.dot(d_mat_inv)
-            # norm_adj = adj.dot(d_mat_inv)
-            # print('generate single-normalized adjacency matrix.')
             return norm_adj.tocoo()
 
-        # norm_adj_mat = normalized_adj_single(adj_mat + sp.eye(adj_mat.shape[0]))
         norm_adj_mat = normalized_adj_single(adj_mat)
         norm_adj_mat = norm_adj_mat.tolil()
         self.R = norm_adj_mat[:self.n_users, self.n_users:]
-        # norm_adj_mat = normalized_adj_single(adj_mat + sp.eye(adj_mat.shape[0]))
         return norm_adj_mat.tocsr()
 
     def sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
-        """Convert a scipy sparse matrix to a torch sparse tensor."""
         sparse_mx = sparse_mx.tocoo().astype(np.float32)
         indices = torch.from_numpy(np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
         values = torch.from_numpy(sparse_mx.data)
@@ -261,7 +241,6 @@ class MGCN(GeneralRecommender):
         if self.a_feat is not None:
             audio_feats = self.audio_trs(self.audio_embedding.weight)
 
-        # Behavior-Guided Purifier
         image_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_v(image_feats))
         text_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_t(text_feats))
         if self.a_feat is not None:
@@ -280,14 +259,12 @@ class MGCN(GeneralRecommender):
                 text_item_embeds = torch.einsum("ij, i -> ij", text_item_embeds, mask)
                 if self.a_feat is not None:
                     audio_item_embeds = torch.einsum("ij, i -> ij", audio_item_embeds, mask)
-                # item_embeds = torch.einsum("ij, i -> ij", item_embeds, mask)
         else :
             image_org_adj = self.image_original_adj
             text_org_adj = self.text_original_adj
             if self.a_feat is not None:
                 audio_org_adj = self.audio_original_adj
 
-        # User-Item View
         item_embeds = self.item_id_embedding.weight
         user_embeds = self.user_embedding.weight
         ego_embeddings = torch.cat([user_embeds, item_embeds], dim=0)
@@ -300,7 +277,6 @@ class MGCN(GeneralRecommender):
         all_embeddings = all_embeddings.mean(dim=1, keepdim=False)
         content_embeds = all_embeddings
 
-        # Item-Item View
         if self.sparse:
             for i in range(self.n_layers):
                 image_item_embeds = torch.sparse.mm(image_org_adj, image_item_embeds)
@@ -328,7 +304,6 @@ class MGCN(GeneralRecommender):
             audio_user_embeds = torch.sparse.mm(self.R, audio_item_embeds)
             audio_embeds = torch.cat([audio_user_embeds, audio_item_embeds], dim=0)
 
-        # Behavior-Aware Fuser
         if self.a_feat is not None:
             att_common = torch.cat([self.query_common(image_embeds), self.query_common(text_embeds), self.query_common(audio_embeds)], dim=-1)
         else:
@@ -354,7 +329,6 @@ class MGCN(GeneralRecommender):
         sep_image_embeds = torch.multiply(image_prefer, sep_image_embeds)
         sep_text_embeds = torch.multiply(text_prefer, sep_text_embeds)
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (tiktok fuser: 4-way average)
             sep_audio_embeds = torch.multiply(audio_prefer, sep_audio_embeds)
 
             side_embeds = (sep_image_embeds + sep_text_embeds +sep_audio_embeds+ common_embeds) / 4
@@ -421,6 +395,5 @@ class MGCN(GeneralRecommender):
         restore_user_e, restore_item_e = self.forward(self.norm_adj)
         u_embeddings = restore_user_e[user]
 
-        # dot with all item embedding to accelerate
         scores = torch.matmul(u_embeddings, restore_item_e.transpose(0, 1))
         return scores

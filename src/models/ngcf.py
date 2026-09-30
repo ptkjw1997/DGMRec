@@ -1,14 +1,7 @@
 # coding: utf-8
-r"""
-NGCF
-################################################
+"""NGCF
 Reference:
     Xiang Wang et al. "Neural Graph Collaborative Filtering." in SIGIR 2019.
-
-Plain NGCF over the user-item bipartite graph (no multimodal features).
-Serves as the traditional CF baseline; it is unaffected by missing modalities
-by construction. (The previous file under this name was the DA-MRS framework
-with an NGCF backbone and has been preserved as damrs_ngcf_backbone.py.bak.)
 """
 
 import numpy as np
@@ -60,7 +53,6 @@ class NGCF(GeneralRecommender):
         inter_M_t = self.interaction_matrix.transpose()
         data_dict = dict(zip(zip(inter_M.row, inter_M.col + self.n_users), [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col), [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
 

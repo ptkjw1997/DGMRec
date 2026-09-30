@@ -30,13 +30,11 @@ class LGMRec(GeneralRecommender):
 
         self.hgnnLayer = HGNNLayer(self.n_hyper_layer)
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         self.adj = self.scipy_matrix_to_sparse_tenser(self.interaction_matrix, torch.Size((self.n_users, self.n_items)))
         self.num_inters, self.norm_adj = self.get_norm_adj_mat()
         self.num_inters = torch.FloatTensor(1.0 / (self.num_inters + 1e-7)).to(self.device)
         
-        # init user and item ID embeddings
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_dim)
         self.item_id_embedding = nn.Embedding(self.n_items, self.embedding_dim)
         nn.init.xavier_uniform_(self.user_embedding.weight)
@@ -58,7 +56,6 @@ class LGMRec(GeneralRecommender):
 
         self.drop = nn.Dropout(p=1-self.keep_rate)
 
-        # load item modal features and define hyperedges embeddings
         if self.v_feat is not None:
             self.image_embedding = nn.Embedding.from_pretrained(self.v_feat, freeze=True)
             self.item_image_trs = nn.Parameter(nn.init.xavier_uniform_(torch.zeros(self.v_feat.shape[1], self.feat_embed_dim)))
@@ -72,25 +69,6 @@ class LGMRec(GeneralRecommender):
             self.item_audio_trs = nn.Parameter(nn.init.xavier_uniform_(torch.zeros(self.a_feat.shape[1], self.feat_embed_dim)))
             self.a_hyper = nn.Parameter(nn.init.xavier_uniform_(torch.zeros(self.a_feat.shape[1], self.hyper_num)))
 
-        # # Decoder
-        # # self.item_image_decoder = nn.Sequential(
-        # #     nn.Linear(self.t_)
-        # # )
-
-        # # Modality Generation
-        # self.image_generator = nn.Sequential(
-        #     nn.Linear(64, 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, self.v_feat.shape[1])
-        # )
-        # self.text_generator = nn.Sequential(
-        #     nn.Linear(64, 256),
-        #     nn.ReLU(),
-        #     nn.Linear(256, self.t_feat.shape[1])
-        # )
-        # nn.init.xavier_uniform_(self.image_generator[0].weight); nn.init.xavier_uniform_(self.image_generator[2].weight)
-        # nn.init.xavier_uniform_(self.text_generator[0].weight); nn.init.xavier_uniform_(self.text_generator[2].weight)
-
 
     def preprocess_missing_modal(self, config) :
 
@@ -101,7 +79,6 @@ class LGMRec(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # 3-modality historical behavior preserved: complete_items stays np.arange(n_items); items_tv not set
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -131,21 +108,16 @@ class LGMRec(GeneralRecommender):
         inter_M_t = self.interaction_matrix.transpose()
         data_dict = dict(zip(zip(inter_M.row, inter_M.col + self.n_users), [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col), [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
-        # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
-        # add epsilon to avoid Devide by zero Warning
         diag = np.array(sumArr.flatten())[0] + 1e-7
         diag = np.power(diag, -0.5)
         D = sp.diags(diag)
         L = D * A * D
-        # covert norm_adj matrix to tensor
         L = sp.coo_matrix(L)
         return sumArr, self.scipy_matrix_to_sparse_tenser(L, torch.Size((self.n_nodes, self.n_nodes)))
     
-    # collaborative graph embedding
     def cge(self):
         if self.cf_model == 'mf':
             cge_embs = torch.cat((self.user_embedding.weight, self.item_id_embedding.weight), dim=0)
@@ -159,7 +131,6 @@ class LGMRec(GeneralRecommender):
             cge_embs = cge_embs.mean(dim=1, keepdim=False)
         return cge_embs
     
-    # modality graph embedding
     def mge(self, str='v'):
         if str == 'v':
             item_feats = torch.mm(self.image_embedding.weight, self.item_image_trs)
@@ -168,7 +139,6 @@ class LGMRec(GeneralRecommender):
         elif str == 'a' :
             item_feats = torch.mm(self.audio_embedding.weight, self.item_audio_trs)
         user_feats = torch.sparse.mm(self.adj, item_feats) * self.num_inters[:self.n_users]
-        # user_feats = self.user_embedding.weight
         mge_feats = torch.concat([user_feats, item_feats], dim=0)
         for _ in range(self.n_mm_layer):
             mge_feats = torch.sparse.mm(self.norm_adj, mge_feats)
@@ -181,17 +151,8 @@ class LGMRec(GeneralRecommender):
             text_embedding = self.text_embedding.weight
         if self.a_feat is not None and audio_embedding is None :
             audio_embedding = self.audio_embedding.weight
-        # CGE: collaborative graph embedding
         cge_embs = self.cge()
 
-        # hyperedge dependencies constructing
-
-        # if self.new_items and self.training :
-        #     mask = torch.ones(image_embedding.shape[0]).to(self.device)
-        #     mask[self.new_items_set] = 0.0
-        #     with torch.no_grad() :
-        #         image_embedding = torch.einsum("ij, i -> ij", image_embedding, mask)
-        #         text_embedding = torch.einsum("ij, i -> ij", text_embedding, mask)
 
         if self.v_feat is not None:
             iv_hyper = torch.mm(image_embedding, self.v_hyper)
@@ -210,18 +171,14 @@ class LGMRec(GeneralRecommender):
             ua_hyper = F.gumbel_softmax(ua_hyper, self.tau, dim=1, hard=False)
 
         if self.v_feat is not None and self.t_feat is not None:
-            # MGE: modal graph embedding
             v_feats = self.mge('v')
             t_feats = self.mge('t')
             if self.a_feat is not None:
                 a_feats = self.mge('a')
-                # local embeddings = collaborative-related embedding + modality-related embedding
                 mge_embs = F.normalize(v_feats) + F.normalize(t_feats) + F.normalize(a_feats)
             else:
-                # local embeddings = collaborative-related embedding + modality-related embedding
                 mge_embs = F.normalize(v_feats) + F.normalize(t_feats)
             lge_embs = cge_embs + mge_embs
-            # GHE: global hypergraph embedding
             uv_hyper_embs, iv_hyper_embs = self.hgnnLayer(self.drop(iv_hyper), self.drop(uv_hyper), cge_embs[self.n_users:])
             ut_hyper_embs, it_hyper_embs = self.hgnnLayer(self.drop(it_hyper), self.drop(ut_hyper), cge_embs[self.n_users:])
             if self.a_feat is not None:
@@ -233,7 +190,6 @@ class LGMRec(GeneralRecommender):
                 ghe_embs = av_hyper_embs + at_hyper_embs + aa_hyper_embs
             else:
                 ghe_embs = av_hyper_embs + at_hyper_embs
-            # local embeddings + alpha * global embeddings
             all_embs = lge_embs + self.alpha * F.normalize(ghe_embs)
         else:
             all_embs = cge_embs
@@ -281,28 +237,6 @@ class LGMRec(GeneralRecommender):
                 v_index = pos_items.detach().cpu().numpy()
                 tv_index = pos_items.detach().cpu().numpy()
 
-        # cge_embs = self.cge()
-
-        # item_embs_agg = torch.sparse.mm(self.adj.t(), cge_embs[:self.n_users, :]) * self.num_inters[self.n_users:]
-
-        # image_embs_gen = self.image_generator(item_embs_agg)
-        # text_embs_gen = self.text_generator(item_embs_agg)
-        # unique_item_id, inverse = torch.unique(torch.cat((pos_items, neg_items)), return_inverse = True, sorted=False)
-        # unique_item_id= unique_item_id.detach().cpu().numpy()
-        # if self.missing_modal :
-        #     complete_idx = np.isin(unique_item_id, self.complete_items)
-        #     pos_complete_idx = np.isin(pos_items.detach().cpu().numpy(), self.complete_items)
-        # else :
-        #     complete_idx = np.ones_like(unique_item_id, dtype = 'bool')
-        #     pos_complete_idx = np.ones_like(pos_items.detach().cpu().numpy(), dtype = 'bool')
-
-        # loss_gen = F.mse_loss(self.image_embedding.weight[unique_item_id][complete_idx], image_embs_gen[unique_item_id][complete_idx])
-        # loss_gen += F.mse_loss(self.text_embedding.weight[unique_item_id][complete_idx], text_embs_gen[unique_item_id][complete_idx])
-
-        # if self.missing_modal :
-        #     with torch.no_grad() :
-        #         self.image_embedding.weight[self.missing_items_v] = image_embs_gen[self.missing_items_v]
-        #         self.text_embedding.weight[self.missing_items_t] = text_embs_gen[self.missing_items_t]
 
         ua_embeddings, ia_embeddings, hyper_embeddings = self.forward()
 
@@ -313,7 +247,6 @@ class LGMRec(GeneralRecommender):
         batch_bpr_loss = self.bpr_loss(u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings)
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: pos_items/complete_items used directly (no tv_index)
             [uv_embs, iv_embs, ut_embs, it_embs, ua_embs, ia_embs] = hyper_embeddings
             batch_hcl_loss = self.ssl_triple_loss(uv_embs[users], ut_embs[users], ut_embs) + self.ssl_triple_loss(iv_embs[pos_items], it_embs[pos_items], it_embs[self.complete_items])
             batch_hcl_loss += self.ssl_triple_loss(ua_embs[users], uv_embs[users], uv_embs) + self.ssl_triple_loss(ia_embs[pos_items], iv_embs[pos_items], iv_embs[self.complete_items])
@@ -325,9 +258,9 @@ class LGMRec(GeneralRecommender):
         batch_reg_loss = self.reg_loss(u_g_embeddings, pos_i_g_embeddings, neg_i_g_embeddings)
 
         if self.a_feat is not None:
-            loss = batch_bpr_loss + self.cl_weight * batch_hcl_loss / 3.0 + self.reg_weight * batch_reg_loss # + loss_gen * self.gen_weight
+            loss = batch_bpr_loss + self.cl_weight * batch_hcl_loss / 3.0 + self.reg_weight * batch_reg_loss
         else:
-            loss = batch_bpr_loss + self.cl_weight * batch_hcl_loss + self.reg_weight * batch_reg_loss # + loss_gen * self.gen_weight
+            loss = batch_bpr_loss + self.cl_weight * batch_hcl_loss + self.reg_weight * batch_reg_loss
 
         return loss
 

@@ -1,10 +1,8 @@
 # coding: utf-8
 
-r"""
-VBPR -- Recommended version
-################################################
+"""VBPR
 Reference:
-VBPR: Visual Bayesian Personalized Ranking from Implicit Feedback -Ruining He, Julian McAuley. AAAI'16
+    Ruining He and Julian McAuley. "VBPR: Visual Bayesian Personalized Ranking from Implicit Feedback." in AAAI 2016.
 """
 import numpy as np
 import os
@@ -12,22 +10,18 @@ import torch
 import torch.nn as nn
 
 from common.abstract_recommender import GeneralRecommender
-from common.loss import BPRLoss, EmbLoss, DiceLoss
+from common.loss import BPRLoss, EmbLoss
 from common.init import xavier_normal_initialization
 import torch.nn.functional as F
 
 class VBPR(GeneralRecommender):
-    r"""BPR is a basic matrix factorization model that be trained in the pairwise way.
-    """
     def __init__(self, config, dataloader):
         super(VBPR, self).__init__(config, dataloader)
 
-        # load parameters info
         self.u_embedding_size = self.i_embedding_size = config['embedding_size']
-        self.reg_weight = config['reg_weight']  # float32 type: the weight decay for l2 normalizaton
+        self.reg_weight = config['reg_weight']
         self.idx = 0
 
-        # define layers and loss
         self.u_embedding = nn.Parameter(nn.init.xavier_uniform_(torch.empty(self.n_users, self.u_embedding_size * 2)))
         self.i_embedding = nn.Parameter(nn.init.xavier_uniform_(torch.empty(self.n_items, self.i_embedding_size)))
 
@@ -49,10 +43,9 @@ class VBPR(GeneralRecommender):
 
 
         self.item_linear = nn.Linear(self.item_raw_features.shape[1], self.i_embedding_size)
-        self.loss = BPRLoss() # DiceLoss()
+        self.loss = BPRLoss()
         self.reg_loss = EmbLoss()
 
-        # parameters initialization
         self.apply(xavier_normal_initialization)
 
     def preprocess_missing_modal(self, config) :
@@ -64,7 +57,6 @@ class VBPR(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # NOTE: historical 3-modality (tiktok) branch
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -84,25 +76,9 @@ class VBPR(GeneralRecommender):
         self.missing_imputation = config['missing_imputation']
         
     def get_user_embedding(self, user):
-        r""" Get a batch of user embedding tensor according to input user's id.
-
-        Args:
-            user (torch.LongTensor): The input tensor that contains user's id, shape: [batch_size, ]
-
-        Returns:
-            torch.FloatTensor: The embedding tensor of a batch of user, shape: [batch_size, embedding_size]
-        """
         return self.u_embedding[user, :]
 
     def get_item_embedding(self, item):
-        r""" Get a batch of item embedding tensor according to input item's id.
-
-        Args:
-            item (torch.LongTensor): The input tensor that contains item's id, shape: [batch_size, ]
-
-        Returns:
-            torch.FloatTensor: The embedding tensor of a batch of item, shape: [batch_size, embedding_size]
-        """
         return self.item_embedding[item, :]
 
     def forward(self, dropout=0.0):
@@ -114,13 +90,6 @@ class VBPR(GeneralRecommender):
         return user_e, item_e
 
     def calculate_loss(self, interaction):
-        """
-        loss on one batch
-        :param interaction:
-            batch data format: tensor(3, batch_size)
-            [0]: user list; [1]: positive items; [2]: negative items
-        :return:
-        """
         user = interaction[0]
         pos_item = interaction[1]
         neg_item = interaction[2]

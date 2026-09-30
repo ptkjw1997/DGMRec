@@ -1,7 +1,6 @@
 # coding: utf-8
 
 import os
-import random
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -23,7 +22,6 @@ class CI2MG(GeneralRecommender):
         self.lamb_2 = config['lamb_2']
         self.temp = config['temp']
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         self.norm_adj = self.get_norm_adj_mat().to(self.device)
 
@@ -55,7 +53,6 @@ class CI2MG(GeneralRecommender):
                 nn.init.xavier_uniform_(self.image_trs.weight)
                 nn.init.xavier_uniform_(self.text_trs.weight)
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (trs xavier inits run after audio_trs creation)
             self.audio_embedding = nn.Embedding.from_pretrained(self.a_feat, freeze=True)
             self.audio_trs = nn.Linear(self.a_feat.shape[1], self.embedding_dim)
             nn.init.xavier_uniform_(self.image_trs.weight)
@@ -82,8 +79,6 @@ class CI2MG(GeneralRecommender):
         self.hgcn_weight_text = nn.Linear(64, 64, bias = False).to(self.device)
         if self.a_feat is not None:
             self.hgcn_weight_audio = nn.Linear(64, 64, bias = False).to(self.device)
-        # nn.init.xavier_uniform_(self.hgcn_weight_image.weight)
-        # nn.init.xavier_uniform_(self.hgcn_weight_text.weight)
 
         self.skh_delta_image = torch.zeros(self.n_items, requires_grad = True).to(self.device)
         self.skh_delta_text = torch.zeros(self.n_items, requires_grad = True).to(self.device)
@@ -111,7 +106,6 @@ class CI2MG(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # 3-modality missing-mask preprocessing (dict keys: all, t, v, a, tv, ta, va)
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -134,17 +128,13 @@ class CI2MG(GeneralRecommender):
                              [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col),
                                   [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
-        # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
-        # add epsilon to avoid Devide by zero Warning
         diag = np.array(sumArr.flatten())[0] + 1e-7
         diag = np.power(diag, -1)
         D = sp.diags(diag)
         L = D * A
-        # covert norm_adj matrix to tensor
         L = sp.coo_matrix(L)
         row = L.row
         col = L.col
@@ -216,9 +206,7 @@ class CI2MG(GeneralRecommender):
             audio_emb = torch.sparse.mm(self.norm_adj, audio_emb)
             _, item_audio_emb = torch.split(audio_emb, [self.n_users, self.n_items], dim=0)
 
-        # Intra-Modality Generation
 
-        # HyperGraph
         H_image = F.normalize(item_image_emb) @ F.normalize(self.image_prot.weight).T
         H_text = F.normalize(item_text_emb) @ F.normalize(self.text_prot.weight).T
         if self.a_feat is not None:
@@ -278,10 +266,8 @@ class CI2MG(GeneralRecommender):
             for _ in range(self.n_hyper_layers) :
                 audio_hyper_emb = torch.sigmoid(R @ audio_hyper_emb)
 
-        # Inter-Modalit Generation
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (pairwise-sum OT couplings)
             dist_it2a = torch.cdist(image_hyper_emb + text_hyper_emb, audio_hyper_emb) ** 2
             ot_it2a = sinkhorn_algorithm2(dist_it2a, 5.0, 10); del dist_it2a
             dist_ia2t = torch.cdist(image_hyper_emb + audio_hyper_emb, text_hyper_emb) ** 2
@@ -305,7 +291,6 @@ class CI2MG(GeneralRecommender):
         text_pos_score = torch.exp(torch.cosine_similarity(text_hyper_emb[t_index], text_rep[t_index]) / self.temp)
         text_neg_score = torch.exp(torch.cosine_similarity(text_hyper_emb[t_index], text_rep[t_index]) / self.temp)
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (audio scores index with t_index, not a_index)
             audio_pos_score = torch.exp(torch.cosine_similarity(audio_hyper_emb[t_index], audio_rep[t_index]) / self.temp)
             audio_neg_score = torch.exp(torch.cosine_similarity(audio_hyper_emb[t_index], audio_rep[t_index]) / self.temp)
 
@@ -327,7 +312,6 @@ class CI2MG(GeneralRecommender):
 
         loss_rec = F.mse_loss(image_enh_emb[v_index], image_emb_raw[v_index]) + F.mse_loss(text_enh_emb[t_index], text_emb_raw[t_index])
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (audio reconstruction indexed with t_index)
             loss_rec = loss_rec + F.mse_loss(audio_enh_emb[t_index], audio_emb_raw[t_index])
 
         if self.a_feat is not None:
@@ -384,9 +368,7 @@ class CI2MG(GeneralRecommender):
             audio_emb = torch.sparse.mm(self.norm_adj, audio_emb)
             _, item_audio_emb = torch.split(audio_emb, [self.n_users, self.n_items], dim=0)
 
-        # Intra-Modality Generation
 
-        # HyperGraph
         H_image = F.normalize(item_image_emb) @ F.normalize(self.image_prot.weight).T
         H_text = F.normalize(item_text_emb) @ F.normalize(self.text_prot.weight).T
         if self.a_feat is not None:
@@ -446,9 +428,7 @@ class CI2MG(GeneralRecommender):
             for _ in range(self.n_hyper_layers) :
                 audio_hyper_emb = torch.sigmoid(R @ audio_hyper_emb)
 
-        # Inter-Modalit Generation
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (pairwise-sum OT couplings)
             dist_it2a = torch.cdist(image_hyper_emb + text_hyper_emb, audio_hyper_emb) ** 2
             ot_it2a = sinkhorn_algorithm2(dist_it2a, 5.0, 10); del dist_it2a
             dist_ia2t = torch.cdist(image_hyper_emb + audio_hyper_emb, text_hyper_emb) ** 2
@@ -464,8 +444,6 @@ class CI2MG(GeneralRecommender):
             ot_i2t = sinkhorn_algorithm2(dist, 5.0, 10)
             ot_t2i = sinkhorn_algorithm2(dist.T, 5.0, 10)
 
-            # ot_i2t = sinkhorn_algorithm(image_hyper_emb, text_hyper_emb)
-            # ot_t2i = sinkhorn_algorithm(text_hyper_emb, image_hyper_emb)
 
             image_rep = (ot_t2i  + self.skh_delta_image) @ image_hyper_emb
             text_rep = (ot_i2t  + self.skh_delta_text) @ text_hyper_emb
@@ -503,18 +481,16 @@ class CI2MG(GeneralRecommender):
         loss = -torch.mean(torch.log(torch.sigmoid(pos_scores - neg_scores)))
         return loss
 
-# Graph Convolution Layer
 class GraphConvolution(nn.Module):
     def __init__(self, in_features, out_features):
         super(GraphConvolution, self).__init__()
         self.fc = nn.Linear(in_features, out_features)
 
     def forward(self, adj, features):
-        D = torch.diag(torch.sum(adj, dim=1))  # Degree matrix
-        adj_norm = torch.inverse(D) @ adj  # Normalized adjacency matrix
+        D = torch.diag(torch.sum(adj, dim=1))
+        adj_norm = torch.inverse(D) @ adj
         return self.fc(adj_norm @ features)
 
-# Hypergraph Convolution
 class HyperGraphConvolution(nn.Module):
     def __init__(self, in_dim, out_dim):
         super(HyperGraphConvolution, self).__init__()
@@ -531,29 +507,17 @@ class HyperGraphConvolution(nn.Module):
 
 @torch.no_grad()
 def sinkhorn_algorithm(a, b, epsilon=1.0, max_iter=50):
-    """
-    Compute the Sinkhorn distance between two distributions using optimal transport.
-    Args:
-        a: Tensor of size (batch_size, feature_dim), representing source modality features.
-        b: Tensor of size (batch_size, feature_dim), representing target modality features.
-        epsilon: Regularization parameter for Sinkhorn distance.
-        max_iter: Maximum iterations for convergence.
-    Returns:
-        Optimal transport cost between `a` and `b`.
-    """
     n = a.size(0)
-    M = torch.cdist(a, b, p=2) ** 2  # Euclidean distance matrix between `a` and `b`
+    M = torch.cdist(a, b, p=2) ** 2
 
-    K = torch.exp(-M / epsilon)  # Kernel (similarity) matrix
-    u = torch.ones(n, device = M.device) / n  # Marginal for a
-    v = torch.ones(n, device = M.device) / n  # Marginal for b
+    K = torch.exp(-M / epsilon)
+    u = torch.ones(n, device = M.device) / n
+    v = torch.ones(n, device = M.device) / n
 
-    # Sinkhorn iterations
     for _ in range(max_iter):
         u = 1.0 / (K @ (v.unsqueeze(1))).squeeze(1)
         v = 1.0 / (K.T @ (u.unsqueeze(1))).squeeze(1)
 
-    # Optimal transport cost
     transport_cost = u.unsqueeze(1) * K * v.unsqueeze(0) * M
     return transport_cost
 
@@ -563,31 +527,27 @@ class GCNLayer(nn.Module):
         self.fc = nn.Linear(input_dim, output_dim)
 
     def forward(self, adj, features):
-        D = torch.diag(torch.sum(adj, dim=1))  # Degree matrix
-        adj_norm = torch.inverse(D) @ adj  # Normalized adjacency matrix
+        D = torch.diag(torch.sum(adj, dim=1))
+        adj_norm = torch.inverse(D) @ adj
         return self.fc(adj_norm @ features)
 
 @torch.no_grad()
 def sinkhorn_algorithm2(distances, epsilon, sinkhorn_iterations):
     Q = torch.exp(-distances / epsilon)
 
-    B = Q.shape[0] # number of samples to assign
-    K = Q.shape[1] # how many centroids per block (usually set to 256)
+    B = Q.shape[0]
+    K = Q.shape[1]
 
-    # make the matrix sums to 1
     sum_Q = Q.sum(-1, keepdim=True).sum(-2, keepdim=True)
     Q /= sum_Q
-    # print(Q.sum())
     for it in range(sinkhorn_iterations):
 
-        # normalize each column: total weight per sample must be 1/B
         Q /= torch.sum(Q, dim=1, keepdim=True)
         Q /= B
 
-        # normalize each row: total weight per prototype must be 1/K
         Q /= torch.sum(Q, dim=0, keepdim=True)
         Q /= K
 
 
-    Q *= B # the colomns must sum to 1 so that Q is an assignment
+    Q *= B
     return Q

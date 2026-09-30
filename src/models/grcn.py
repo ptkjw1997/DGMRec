@@ -1,48 +1,27 @@
 # coding: utf-8
-# 
-"""
-Graph-Refined Convolutional Network for Multimedia Recommendation with Implicit Feedback, MM 2020
-"""
-import math
 import os
-import time
-from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import Parameter
 import torch.nn.functional as F
-#from SAGEConv import SAGEConv
-#from GATConv import GATConv
-# from torch_geometric.nn.conv import MessagePassing
-# from torch_geometric.utils import add_self_loops, dropout_adj
-# from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
 
 from common.abstract_recommender import GeneralRecommender
-from common.loss import BPRLoss, EmbLoss
-from common.init import xavier_uniform_initialization
-# from torch.utils.checkpoint import checkpoint
-##########################################################################
 def add_self_loops(edge_index, num_nodes):
-    """Add self-loops to the edge index."""
     loops = torch.arange(0, num_nodes, device=edge_index.device).unsqueeze(0).repeat(2, 1)
     edge_index = torch.cat([edge_index, loops], dim=1)
     return edge_index
 
 def remove_self_loops(edge_index):
-    """Remove self-loops from the edge index."""
     mask = edge_index[0] != edge_index[1]
     edge_index = edge_index[:, mask]
     return edge_index
 
 def softmax(values, index, num_nodes):
-    """Manually implement softmax over edge indices."""
     exp_values = torch.exp(values - torch.max(values))
     sum_values = torch.zeros(num_nodes, device=values.device).scatter_add_(0, index, exp_values)
     return exp_values / sum_values[index]
 
 def filter_adj(row, col, edge_attr, mask):
-    """Filter edges based on the mask."""
     row = row[mask]
     col = col[mask]
     if edge_attr is not None:
@@ -50,7 +29,6 @@ def filter_adj(row, col, edge_attr, mask):
     return row, col, edge_attr
 
 def dropout_edge(edge_index, edge_attr=None, p=0.5, force_undirected=False, num_nodes=None, training=True):
-    """Drop edges based on probability."""
     if p < 0. or p > 1.:
         raise ValueError(f"Dropout probability has to be between 0 and 1 (got {p})")
 
@@ -82,9 +60,6 @@ from torch_geometric.utils import remove_self_loops, add_self_loops, softmax as 
 
 
 class SAGEConv(MessagePassing):
-    """Original PyG-based GRCN conv (restored from the commented reference
-    implementation; the interim hand-written port mis-aligned routing
-    weights and under-performed)."""
     def __init__(self, in_channels, out_channels, normalize=True, bias=True, aggr='add', **kwargs):
         super(SAGEConv, self).__init__(aggr=aggr, **kwargs)
         self.in_channels = in_channels
@@ -153,92 +128,6 @@ class EGCN(torch.nn.Module):
         return x + x_hat_1 + x_hat_2
 
 
-# class SAGEConv(MessagePassing):
-#     def __init__(self, in_channels, out_channels, normalize=True, bias=True, aggr='mean', **kwargs):
-#         super(SAGEConv, self).__init__(aggr=aggr, **kwargs)
-#         self.in_channels = in_channels
-#         self.out_channels = out_channels
-
-#     def forward(self, x, edge_index, weight_vector, size=None):
-#         self.weight_vector = weight_vector
-#         return self.propagate(edge_index, size=size, x=x)
-
-#     def message(self, x_j):
-#         return x_j * self.weight_vector
-
-#     def update(self, aggr_out):
-#         return aggr_out
-
-#     def __repr__(self):
-#         return '{}({}, {})'.format(self.__class__.__name__, self.in_channels,
-#                                    self.out_channels)
-
-# class GATConv(MessagePassing):
-#     def __init__(self, in_channels, out_channels, self_loops=False):
-#         super(GATConv, self).__init__(aggr='add')#, **kwargs)
-#         self.self_loops = self_loops
-#         self.in_channels = in_channels
-#         self.out_channels = out_channels
-
-#     def forward(self, x, edge_index, size=None):
-#         edge_index, _ = remove_self_loops(edge_index)
-#         if self.self_loops:
-#             edge_index, _ = add_self_loops(edge_index, num_nodes=x.size(0))
-
-#         return self.propagate(edge_index, size=size, x=x)
-
-
-#     def message(self,  x_i, x_j, size_i ,edge_index_i):
-#         #print(edge_index_i, x_i, x_j)
-#         self.alpha = torch.mul(x_i, x_j).sum(dim=-1)
-#         #print(self.alpha)
-#         #print(edge_index_i,size_i)
-#         # alpha = F.tanh(alpha)
-#         # self.alpha = F.leaky_relu(self.alpha)
-#         # alpha = torch.sigmoid(alpha)
-#         self.alpha = softmax(self.alpha, edge_index_i, num_nodes=size_i)
-#         # Sample attention coefficients stochastically.
-#         # alpha = F.dropout(alpha, p=self.dropout, training=self.training)
-#         return x_j*self.alpha.view(-1,1)
-#         # return x_j * alpha.view(-1, self.heads, 1)
-
-#     def update(self, aggr_out):
-#         return aggr_out
-
-
-
-# class EGCN(torch.nn.Module):
-#     def __init__(self, num_user, num_item, dim_E, aggr_mode, has_act, has_norm):
-#         super(EGCN, self).__init__()
-#         self.num_user = num_user
-#         self.num_item = num_item
-#         self.dim_E = dim_E
-#         self.aggr_mode = aggr_mode
-#         self.has_act = has_act
-#         self.has_norm = has_norm
-#         self.id_embedding = nn.Parameter( nn.init.xavier_normal_(torch.rand((num_user+num_item, dim_E))))
-#         self.conv_embed_1 = SAGEConv(dim_E, dim_E, aggr=aggr_mode)         
-#         self.conv_embed_2 = SAGEConv(dim_E, dim_E, aggr=aggr_mode)
-
-#     def forward(self, edge_index, weight_vector):
-#         x = self.id_embedding
-#         edge_index = torch.cat((edge_index, edge_index[[1,0]]), dim=1)
-
-#         if self.has_norm:
-#             x = F.normalize(x) 
-
-#         x_hat_1 = self.conv_embed_1(x, edge_index, weight_vector) 
-
-#         if self.has_act:
-#             x_hat_1 = F.leaky_relu_(x_hat_1)
-
-#         x_hat_2 = self.conv_embed_2(x_hat_1, edge_index, weight_vector)
-#         if self.has_act:
-#             x_hat_2 = F.leaky_relu_(x_hat_2)
-
-#         return x + x_hat_1 + x_hat_2
-
-
 class CGCN(torch.nn.Module):
     def __init__(self, features, num_user, num_item, dim_C, aggr_mode, num_routing, has_act, has_norm, is_word=False):
         super(CGCN, self).__init__()
@@ -262,23 +151,17 @@ class CGCN(torch.nn.Module):
             self.dim_feat = features.size(1)
             self.features = features
             self.MLP = nn.Linear(self.dim_feat, self.dim_C)
-            #print('MLP weight',self.MLP.weight)
             nn.init.xavier_normal_(self.MLP.weight)
-            #print(self.MLP.weight)
 
     def forward(self, edge_index):
-        #print(self.features)
         features = F.leaky_relu(self.MLP(self.features))
-        #print('features',features)
         
         if self.has_norm:
             preference = F.normalize(self.preference)
             features = F.normalize(features)
-            #print(preference,features)
 
         for i in range(self.num_routing):
             x = torch.cat((preference, features), dim=0)
-            #print(x,edge_index)
             x_hat_1 = self.conv_embed_1(x, edge_index) 
             preference = preference + x_hat_1[:self.num_user]
 
@@ -306,7 +189,7 @@ class GRCN(GeneralRecommender):
         dim_x = config['embedding_size']
         dim_C = config['latent_embedding']
         num_layer = config['n_layers']
-        batch_size = config['train_batch_size']         # not used
+        batch_size = config['train_batch_size']
         self.aggr_mode = 'add'
         self.weight_mode = 'confid'
         self.fusion_mode = 'concat'
@@ -317,11 +200,9 @@ class GRCN(GeneralRecommender):
         self.weight = torch.tensor([[1.0], [-1.0]]).to(self.device)
         self.reg_weight = config['reg_weight']
         self.dropout = 0
-        # packing interaction in training into edge_index
         train_interactions = dataset.inter_matrix(form='coo').astype(np.float32)
         edge_index = torch.tensor(self.pack_edge_index(train_interactions), dtype=torch.long)
         self.edge_index = edge_index.t().contiguous().to(self.device)
-        #self.edge_index = torch.cat((self.edge_index, self.edge_index[[1, 0]]), dim=1)
         self.num_modal = 0
         self.id_gcn = EGCN(num_user, num_item, dim_x, self.aggr_mode, has_act, has_norm)
         self.pruning = True
@@ -367,7 +248,6 @@ class GRCN(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # NOTE: historical 3-modality (tiktok) branch
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -389,7 +269,6 @@ class GRCN(GeneralRecommender):
     def pack_edge_index(self, inter_mat):
         rows = inter_mat.row
         cols = inter_mat.col + self.n_users
-        # ndarray([598918, 2]) for ml-imdb
         return np.column_stack((rows, cols))
 
     def dropout_adj(self, edge_index, edge_attr = None, p = 0.5, force_undirected = False, num_nodes = None, training = True):
@@ -425,16 +304,12 @@ class GRCN(GeneralRecommender):
         content_rep = None
         num_modal = 0
         edge_index, _ = self.dropout_adj(self.edge_index, p=self.dropout)
-        # edge_index = self.dropout_edge(self.edge_index, p=0.5, training=self.training)
-        #print('edge_index: ', edge_index)
 
         if self.v_feat is not None:
             num_modal += 1
             v_rep, weight_v = self.v_gcn(edge_index)
             weight = weight_v
             content_rep = v_rep
-            #print('weight_v is: ', weight)
-            #print('content_rep: ',content_rep)
 
         if self.a_feat is not None:
             num_modal += 1
@@ -480,7 +355,6 @@ class GRCN(GeneralRecommender):
 
 
         id_rep = self.id_gcn(edge_index, weight)
-        #print('id_rep is: ',id_rep)
 
         if self.fusion_mode == 'concat':
             representation = torch.cat((id_rep, content_rep), dim=1)
@@ -488,11 +362,9 @@ class GRCN(GeneralRecommender):
         elif self.fusion_mode  == 'id':
             representation = id_rep
         elif self.fusion_mode == 'mean':
-            # representation = (id_rep+v_rep+a_rep+t_rep)/4
             representation = (id_rep+v_rep+t_rep)/3
 
         self.result = representation
-        #print('representation is: ',representation)
         return representation
 
     def calculate_loss(self, interaction):
@@ -526,7 +398,6 @@ class GRCN(GeneralRecommender):
         reg_loss = reg_embedding_loss + reg_content_loss
 
         reg_loss = self.reg_weight * reg_loss
-        # debug print removed (tensor __format__ incompatible with torch>=2.4)
 
         return loss + reg_loss
         

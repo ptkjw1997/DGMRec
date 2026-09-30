@@ -15,7 +15,6 @@ knn_k: 10
 
 learning_rate: [0.0005]
 
-# Missing Modality Setting
 missing_modal : 0
 missing_imputation : [0]
 

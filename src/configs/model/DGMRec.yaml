@@ -7,7 +7,6 @@ eval_batch_size: 4096
 knn_k: 10
 n_mm_layers: 1
 
-# loss weights / temperatures
 interModal: 0.01
 interModalTemp: 0.4
 interModalDist: 0.001
@@ -19,7 +18,6 @@ recon: 0.1
 reg: 0.1
 sampler: 0.01
 
-# missing-modality generation
 additive: 1.0
 avg_lambda: 0.8
 infer_adj_update: 1

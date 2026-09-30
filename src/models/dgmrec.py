@@ -1,5 +1,4 @@
 # coding: utf-8
-r"""DGMRec: Disentangled Generative Multimodal Recommendation."""
 import os
 
 import numpy as np
@@ -100,7 +99,7 @@ class DGMRec(GeneralRecommender):
         self.missing_items_m = {m: np.array([], dtype=np.int64) for m in self.mods}
         self.writeback_items_m = {m: np.array([], dtype=np.int64) for m in self.mods}
         if config['missing_modal'] :
-            self.preprocess_missing_modal(config, feats)
+            self.preprocess_missing_modal(config)
 
         self.mm_adj, self.mm_adj_infer = {}, {}
         for m in self.mods :
@@ -267,7 +266,7 @@ class DGMRec(GeneralRecommender):
             for m in self.mods :
                 self.mm_adj_infer[m] = self.mm_adj_infer[m].to(self.device)
 
-    def preprocess_missing_modal(self, config, feats) :
+    def preprocess_missing_modal(self, config) :
         dataset_path = os.path.abspath(config['data_path'] + config['dataset'])
 
         self.missing_ratio = config['missing_ratio']

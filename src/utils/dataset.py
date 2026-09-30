@@ -1,17 +1,9 @@
 # coding: utf-8
 
-"""
-Data pre-processing
-##########################
-"""
 from logging import getLogger
-from collections import Counter
 import os
 import pandas as pd
 import numpy as np
-import torch
-from utils.data_utils import (ImageResize, ImagePad, image_to_tensor, load_decompress_img_from_lmdb_value)
-import lmdb
 
 
 class RecDataset(object):
@@ -19,11 +11,9 @@ class RecDataset(object):
         self.config = config
         self.logger = getLogger()
 
-        # data path & files
         self.dataset_name = config['dataset']
         self.dataset_path = os.path.abspath(config['data_path']+self.dataset_name)
 
-        # dataframe
         self.uid_field = self.config['USER_ID_FIELD']
         self.iid_field = self.config['ITEM_ID_FIELD']
         self.splitting_label = self.config['inter_splitting_label']
@@ -31,7 +21,6 @@ class RecDataset(object):
         if df is not None:
             self.df = df
             return
-        # if all files exists
         check_file_list = [self.config['inter_file_name']]
         for i in check_file_list:
             print(self.dataset_path)
@@ -40,7 +29,6 @@ class RecDataset(object):
             if not os.path.isfile(file_path):
                 raise ValueError('File {} not exist'.format(file_path))
 
-        # load rating file from data path?
         self.load_inter_graph(config['inter_file_name'])
         self.item_num = int(max(self.df[self.iid_field].values)) + 1
         self.user_num = int(max(self.df[self.uid_field].values)) + 1
@@ -55,14 +43,11 @@ class RecDataset(object):
     def split(self):
         dfs = []
 
-        # splitting into training/validation/test
         for i in range(3):
             temp_df = self.df[self.df[self.splitting_label] == i].copy()
-            temp_df.drop(self.splitting_label, inplace=True, axis=1)        # no use again
+            temp_df.drop(self.splitting_label, inplace=True, axis=1)
             dfs.append(temp_df)
 
-        # In new-item mode also build a new-item-only test set:
-        # test interactions (x_label == 2) union train interactions that involve a new item.
         if self.config.get('new_items'):
             new_items = np.load("../data/" + self.dataset_name + '/new_items.npy')
             total_df = pd.read_csv(
@@ -75,7 +60,6 @@ class RecDataset(object):
             new_df = None
 
         if self.config['filter_out_cod_start_users']:
-            # filtering out new users in val/test sets
             train_u = set(dfs[0][self.uid_field].values)
             for i in [1, 2]:
                 dropped_inter = pd.Series(True, index=dfs[i].index)
@@ -87,7 +71,6 @@ class RecDataset(object):
                 dropped_inter ^= new_df[self.uid_field].isin(train_u)
                 new_df.drop(new_df.index[dropped_inter], inplace=True)
 
-        # wrap as RecDataset
         full_ds = [self.copy(_) for _ in dfs]
 
         if new_df is None:
@@ -96,15 +79,6 @@ class RecDataset(object):
         return full_ds, new_df
 
     def copy(self, new_df):
-        """Given a new interaction feature, return a new :class:`Dataset` object,
-                whose interaction feature is updated with ``new_df``, and all the other attributes the same.
-
-                Args:
-                    new_df (pandas.DataFrame): The new interaction feature need to be updated.
-
-                Returns:
-                    :class:`~Dataset`: the new :class:`~Dataset` object, whose interaction feature has been updated.
-                """
         nxt = RecDataset(self.config, new_df)
 
         nxt.item_num = self.item_num
@@ -118,15 +92,12 @@ class RecDataset(object):
         return self.item_num
 
     def shuffle(self):
-        """Shuffle the interaction records inplace.
-        """
         self.df = self.df.sample(frac=1, replace=False).reset_index(drop=True)
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
-        # Series result
         return self.df.iloc[idx]
 
     def __repr__(self):

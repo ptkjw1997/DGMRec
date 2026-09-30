@@ -6,14 +6,6 @@ from utils.utils import get_local_time
 
 
 def init_logger(config):
-    """
-    A logger that can show a message on standard output and write it into the
-    file named `filename` simultaneously.
-    All the message that you want to log MUST be str.
-
-    Args:
-        config (Config): An instance object of Config, used to record parameter information.
-    """
     LOGROOT = f'./log/{config["model"]}/'
     dir_name = os.path.dirname(LOGROOT)
     if not os.path.exists(dir_name):
@@ -47,7 +39,6 @@ def init_logger(config):
         level = logging.CRITICAL
     else:
         level = logging.INFO
-    # comment following 3 lines and handlers = [sh, fh] to cancel file dump.
     fh = logging.FileHandler(logfilepath, 'w', 'utf-8')
     fh.setLevel(level)
     fh.setFormatter(fileformatter)
@@ -58,7 +49,5 @@ def init_logger(config):
 
     logging.basicConfig(
         level=level,
-        # handlers=[sh]
-        # handlers = [sh, fh]
         handlers = [fh]
     )

@@ -1,5 +1,4 @@
 # coding: utf-8
-import shutil
 import os
 import itertools
 import torch
@@ -10,47 +9,24 @@ import numpy as np
 from time import time
 from logging import getLogger
 
-from utils.utils import get_local_time, early_stopping, dict2str
+from utils.utils import early_stopping, dict2str
 from utils.topk_evaluator import TopKEvaluator
 
 class AbstractTrainer(object):
-    r"""Trainer Class is used to manage the training and evaluation processes of recommender system models.
-    AbstractTrainer is an abstract class in which the fit() and evaluate() method should be implemented according
-    to different training and evaluation strategies.
-    """
 
     def __init__(self, config, model):
         self.config = config
         self.model = model
 
     def fit(self, train_data):
-        r"""Train the model based on the train data.
-
-        """
         raise NotImplementedError('Method [next] should be implemented.')
 
     def evaluate(self, eval_data):
-        r"""Evaluate the model based on the eval data.
-
-        """
 
         raise NotImplementedError('Method [next] should be implemented.')
 
 
 class Trainer(AbstractTrainer):
-    r"""The basic Trainer for basic training and evaluation strategies in recommender systems. This class defines common
-    functions for training and evaluation processes of most recommender system models, including fit(), evaluate(),
-   and some other features helpful for model training and evaluation.
-
-    Generally speaking, this class can serve most recommender system models, If the training process of the model is to
-    simply optimize a single loss without involving any complex training strategies, such as adversarial learning,
-    pre-training and so on.
-
-    Initializing the Trainer needs two parameters: `config` and `model`. `config` records the parameters information
-    for controlling training and evaluation, such as `learning_rate`, `epochs`, `eval_step` and so on.
-    More information can be found in [placeholder]. `model` is the instantiated object of a Model Class.
-
-    """
 
     def __init__(self, config, model):
         super(Trainer, self).__init__(config, model)
@@ -84,7 +60,6 @@ class Trainer(AbstractTrainer):
         self.best_test_upon_valid = tmp_dd
         self.train_loss_dict = dict()
         self.optimizer = self._build_optimizer()
-        # DGMRec-specific: CLUB MI estimators are built lazily after the optimizer.
         if hasattr(self.model, 'init_mi_estimator'):
             self.model.init_mi_estimator()
 
@@ -100,11 +75,6 @@ class Trainer(AbstractTrainer):
         self.tot_item_num = None
 
     def _build_optimizer(self):
-        r"""Init the Optimizer
-
-        Returns:
-            torch.optim: the optimizer
-        """
         if self.learner.lower() == 'adam':
             optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         elif self.learner.lower() == 'sgd':
@@ -119,25 +89,11 @@ class Trainer(AbstractTrainer):
         return optimizer
 
     def _train_epoch(self, train_data, epoch_idx, loss_func=None):
-        r"""Train the model in an epoch
-
-        Args:
-            train_data (DataLoader): The train data.
-            epoch_idx (int): The current epoch id.
-            loss_func (function): The loss function of :attr:`model`. If it is ``None``, the loss function will be
-                :attr:`self.model.calculate_loss`. Defaults to ``None``.
-
-        Returns:
-            float/tuple: The sum of loss returned by all batches in this epoch. If the loss in each batch contains
-            multiple parts and the model return these multiple parts loss instead of the sum of loss, It will return a
-            tuple which includes the sum of loss in each part.
-        """
         if not self.req_training:
             return 0.0, []
 
         self.model.train()
 
-        # DGMRec-specific: MI estimators are trained on their own schedule.
         if hasattr(self.model, 'item_image_estimator'):
             self.model.item_image_estimator.eval()
             self.model.item_text_estimator.eval()
@@ -166,24 +122,10 @@ class Trainer(AbstractTrainer):
                 clip_grad_norm_(self.model.parameters(), **self.clip_grad_norm)
             self.optimizer.step()
             loss_batches.append(loss.detach())
-            # for test
-            #if batch_idx == 0:
-            #    break
         return total_loss, loss_batches
 
     def _valid_epoch(self, valid_data, type_ = 'val'):
-        r"""Valid the model with valid data
 
-        Args:
-            valid_data (DataLoader): the valid data
-
-        Returns:
-            float: valid score
-            dict: valid result
-        """
-
-        # New-item inference hook: refresh generated modalities + inference adjacency
-        # before the validation pass. Only active when both new_items and missing_modal are on.
         if (getattr(self.model, 'new_items', 0) == 1
                 and getattr(self.model, 'missing_modal', 0) == 1
                 and hasattr(self.model, 'generate_missing_modal_infer')
@@ -199,7 +141,6 @@ class Trainer(AbstractTrainer):
 
     def _check_nan(self, loss):
         if torch.isnan(loss):
-            #raise ValueError('Training loss is nan')
             return True
 
     def _generate_train_loss_output(self, epoch_idx, s_time, e_time, losses):
@@ -211,31 +152,14 @@ class Trainer(AbstractTrainer):
         return train_loss_output + ']'
 
     def fit(self, train_data, valid_data=None, test_data=None, saved=False, save_dir=None, verbose=True):
-        r"""Train the model based on the train data and the valid data.
-
-        Args:
-            train_data (DataLoader): the train data
-            valid_data (DataLoader, optional): the valid data, default: None.
-                                               If it's None, the early_stopping is invalid.
-            test_data (DataLoader, optional): None
-            verbose (bool, optional): whether to write training and evaluation information to logger, default: True
-            saved (bool, optional): whether to save the model parameters, default: True
-
-        Returns:
-             (float, dict): best valid score and best valid result. If valid_data is None, it returns (-1, None)
-        """
 
         for epoch_idx in range(self.start_epoch, self.epochs):
-            # train
             training_start_time = time()
             self.model.pre_epoch_processing()
 
             train_loss, _ = self._train_epoch(train_data, epoch_idx)
             if torch.is_tensor(train_loss):
-                # get nan loss
                 break
-            #for param_group in self.optimizer.param_groups:
-            #    print('======lr: ', param_group['lr'])
             self.lr_scheduler.step()
 
             self.train_loss_dict[epoch_idx] = sum(train_loss) if isinstance(train_loss, tuple) else train_loss
@@ -248,7 +172,6 @@ class Trainer(AbstractTrainer):
                 if post_info is not None:
                     self.logger.info(post_info)
 
-            # eval: To ensure the test result is the best model under validation data, set self.eval_step == 1
             if (epoch_idx + 1) % self.eval_step == 0:
                 valid_start_time = time()
                 valid_score, valid_result = self._valid_epoch(valid_data)
@@ -260,7 +183,6 @@ class Trainer(AbstractTrainer):
                                      (epoch_idx, valid_end_time - valid_start_time, valid_score)
                 valid_result_output = 'valid result: \n' + dict2str(valid_result)
                 
-                # test
                 _, test_result = self._valid_epoch(test_data, type_ = 'test')
                 if verbose:
                     self.logger.info(valid_score_output)
@@ -292,22 +214,14 @@ class Trainer(AbstractTrainer):
 
     @torch.no_grad()
     def evaluate(self, eval_data, is_test=False, idx=0):
-        r"""Evaluate the model based on the eval data.
-        Returns:
-            dict: eval result, key is the eval metric and value in the corresponding metric value
-        """
         self.model.eval()
 
-        # # batch full users
         batch_matrix_list = []
 
         for batch_idx, batched_data in enumerate(eval_data):
-            # predict: interaction without item ids
             scores = self.model.full_sort_predict(batched_data)
-            masked_items = batched_data[1] # pos item 
-            # mask out pos items
+            masked_items = batched_data[1]
             scores[masked_items[0], masked_items[1]] = -1e10
-            # rank and get top-k
-            _, topk_index = torch.topk(scores, max(self.config['topk']), dim=-1)  # nusers x topk
+            _, topk_index = torch.topk(scores, max(self.config['topk']), dim=-1)
             batch_matrix_list.append(topk_index)
         return self.evaluator.evaluate(batch_matrix_list, eval_data, is_test=is_test, idx=idx)

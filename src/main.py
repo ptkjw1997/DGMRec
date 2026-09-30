@@ -1,6 +1,5 @@
 # coding: utf-8
 
-import os
 import argparse
 from utils.quick_start import quick_start
 

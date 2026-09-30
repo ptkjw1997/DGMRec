@@ -1,8 +1,6 @@
 # coding: utf-8
 
 import os
-import copy
-import random
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -47,7 +45,6 @@ class BM3(GeneralRecommender):
         self.missing_modal = config['missing_modal']
         self.missing_imputation = config['missing_imputation']
 
-        # load dataset info
         self.norm_adj = self.get_norm_adj_mat(dataset.inter_matrix(form='coo').astype(np.float32)).to(self.device)
 
         self.predictor = nn.Linear(self.embedding_dim, self.embedding_dim)
@@ -66,7 +63,7 @@ class BM3(GeneralRecommender):
         if self.a_feat is not None:
             self.audio_embedding = nn.Embedding.from_pretrained(self.a_feat, freeze=False)
             self.audio_trs = nn.Linear(self.a_feat.shape[1], self.feat_embed_dim)
-            nn.init.xavier_normal_(self.text_trs.weight)  # NOTE: historical 3-modality behavior preserved (re-inits text_trs, not audio_trs)
+            nn.init.xavier_normal_(self.text_trs.weight)
 
     def preprocess_missing_modal(self, config) :
 
@@ -77,7 +74,6 @@ class BM3(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items :
-            # NOTE: historical 3-modality (tiktok) branch
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -101,17 +97,13 @@ class BM3(GeneralRecommender):
                              [1] * inter_M.nnz))
         data_dict.update(dict(zip(zip(inter_M_t.row + self.n_users, inter_M_t.col),
                                   [1] * inter_M_t.nnz)))
-        # scipy>=1.12 removed dok_matrix._update; build a COO matrix directly instead
         _rows, _cols = zip(*data_dict.keys())
         A = sp.coo_matrix((list(data_dict.values()), (list(_rows), list(_cols))), shape=A.shape, dtype=np.float32)
-        # norm adj matrix
         sumArr = (A > 0).sum(axis=1)
-        # add epsilon to avoid Devide by zero Warning
         diag = np.array(sumArr.flatten())[0] + 1e-7
         diag = np.power(diag, -0.5)
         D = sp.diags(diag)
         L = D * A * D
-        # covert norm_adj matrix to tensor
         L = sp.coo_matrix(L)
         row = L.row
         col = L.col
@@ -134,13 +126,11 @@ class BM3(GeneralRecommender):
         return u_g_embeddings, i_g_embeddings + h
 
     def calculate_loss(self, interactions):
-        # online network
         u_online_ori, i_online_ori = self.forward()
         t_feat_online, v_feat_online, a_feat_online = None, None, None
         if self.t_feat is not None:
             t_feat_online = self.text_trs(self.text_embedding.weight)
             if self.missing_modal and self.a_feat is None :
-                # NOTE: 2-modality (src) tree masks missing-modality items; 3-modality (tiktok) tree does not
                 t_mask = torch.ones(self.n_items).to(self.device)
                 t_mask[self.missing_items_t] = 0.0
 
@@ -148,7 +138,6 @@ class BM3(GeneralRecommender):
         if self.v_feat is not None:
             v_feat_online = self.image_trs(self.image_embedding.weight)
             if self.missing_modal and self.a_feat is None :
-                # NOTE: 2-modality (src) tree masks missing-modality items; 3-modality (tiktok) tree does not
                 v_mask = torch.ones(self.n_items).to(self.device)
                 v_mask[self.missing_items_v] = 0.0
 
@@ -207,7 +196,6 @@ class BM3(GeneralRecommender):
         loss_iu = 1 - cosine_similarity(i_online, u_target.detach(), dim=-1).mean()
 
         if self.a_feat is not None:
-            # NOTE: historical 3-modality (tiktok) branch (adds audio loss terms)
             return (loss_ui + loss_iu).mean() + self.reg_weight * self.reg_loss(u_online_ori, i_online_ori) + \
                    self.cl_weight * (loss_t + loss_v + loss_tv + loss_vt + loss_a + loss_at).mean()
         return (loss_ui + loss_iu).mean() + self.reg_weight * self.reg_loss(u_online_ori, i_online_ori) + \
@@ -218,11 +206,6 @@ class BM3(GeneralRecommender):
         u_online, i_online = self.forward()
         u_online, i_online = self.predictor(u_online), self.predictor(i_online)
 
-        # if self.new_items :
-        #     modal_online = (self.predictor(self.text_trs(self.text_embedding.weight)) + self.predictor(self.image_trs(self.image_embedding.weight))) / 2.0
-
-        #     i_online[self.new_items_set] = modal_online[self.new_items_set]
 
         score_mat_ui = torch.matmul(u_online[user], i_online.transpose(0, 1))
         return score_mat_ui
-

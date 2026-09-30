@@ -1,9 +1,7 @@
-import numpy as np
-import math
 import torch 
 import torch.nn as nn
     
-class CLUBSample(nn.Module):  # Sampled version of the CLUB estimator
+class CLUBSample(nn.Module):
     def __init__(self, x_dim, y_dim, hidden_size):
         super(CLUBSample, self).__init__()
         self.p_mu = nn.Sequential(nn.Linear(x_dim, hidden_size//2),
@@ -30,7 +28,6 @@ class CLUBSample(nn.Module):  # Sampled version of the CLUB estimator
         mu, logvar = self.get_mu_logvar(x_samples)
         
         sample_size = x_samples.shape[0]
-        #random_index = torch.randint(sample_size, (sample_size,)).long()
         random_index = torch.randperm(sample_size).long()
         
         positive = - (mu - y_samples)**2 / logvar.exp()
@@ -40,4 +37,3 @@ class CLUBSample(nn.Module):  # Sampled version of the CLUB estimator
 
     def learning_loss(self, x_samples, y_samples):
         return - self.loglikeli(x_samples, y_samples)
-

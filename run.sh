@@ -12,8 +12,6 @@ if [ -f "$BEST" ]; then
     OVERRIDE=$(cat "$BEST")
 fi
 
-# missing-feature ratio (0.666 Amazon, 0.75 tiktok);
-# defaults also live in src/configs/{overall,dataset/*}.yaml
 RATIO=0.666
 if [ "$DATASET" = "tiktok" ]; then
     RATIO=0.75

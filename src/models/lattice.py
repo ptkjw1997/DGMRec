@@ -1,17 +1,14 @@
 # coding: utf-8
 
-r"""
-LATTICE
-################################################
+"""LATTICE
 Reference:
     https://github.com/CRIPAC-DIG/LATTICE
-    ACM MM'2021: [Mining Latent Structures for Multimedia Recommendation] 
+    ACM MM'2021: [Mining Latent Structures for Multimedia Recommendation]
     https://arxiv.org/abs/2104.09036
 """
 
 
 import os
-import random
 import numpy as np
 import scipy.sparse as sp
 import torch
@@ -19,7 +16,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from common.abstract_recommender import GeneralRecommender
-from common.loss import BPRLoss, EmbLoss, L2Loss
 from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neighbourhood
 
 
@@ -37,7 +33,6 @@ class LATTICE(GeneralRecommender):
         self.reg_weight = config['reg_weight']
         self.build_item_graph = True
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         self.norm_adj = self.get_adj_mat()
         self.norm_adj = self.sparse_mx_to_torch_sparse_tensor(self.norm_adj).float().to(self.device)
@@ -71,7 +66,6 @@ class LATTICE(GeneralRecommender):
             if self.a_feat is None :
                 with torch.no_grad() :
                     self.item_id_embedding.weight[self.new_items_set] = 0.0
-            # 3-modality historical behavior preserved: tiktok tree does not zero new-item id embeddings
         else :
             self.new_items_set = self.old_items_set = np.arange(self.n_items)
 
@@ -81,8 +75,6 @@ class LATTICE(GeneralRecommender):
         self.missing_imputation = config['missing_imputation']
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: dense original adjacencies, no missing-modal
-            # masking and no new-items variants in the tiktok tree
             if self.v_feat is not None:
                 self.image_embedding = nn.Embedding.from_pretrained(self.v_feat, freeze=False)
                 image_adj = build_sim(self.image_embedding.weight.detach())
@@ -201,15 +193,12 @@ class LATTICE(GeneralRecommender):
             d_mat_inv = sp.diags(d_inv)
 
             norm_adj = d_mat_inv.dot(adj)
-            # norm_adj = adj.dot(d_mat_inv)
-            #print('generate single-normalized adjacency matrix.')
             return norm_adj.tocoo()
 
         norm_adj_mat = normalized_adj_single(adj_mat + sp.eye(adj_mat.shape[0]))
         return norm_adj_mat.tocsr()
 
     def sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
-        """Convert a scipy sparse matrix to a torch sparse tensor."""
         sparse_mx = sparse_mx.tocoo().astype(np.float32)
         indices = torch.from_numpy(np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
         values = torch.from_numpy(sparse_mx.data)
@@ -222,16 +211,12 @@ class LATTICE(GeneralRecommender):
         if self.t_feat is not None:
             text_feats = self.text_trs(self.text_embedding.weight)
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: guarded by t_feat (not a_feat) in the tiktok tree
             if self.t_feat is not None:
                 audio_feats = self.audio_trs(self.audio_embedding.weight)
         if build_item_graph:
             weight = self.softmax(self.modal_weight)
 
             if self.a_feat is not None:
-                # 3-modality historical behavior preserved: no new-items masking, no laplacian on
-                # learned_adj, original adjacencies folded into item_adj (no separate org_adj)
-                # if self.v_feat is not None:
                 self.image_adj = build_sim(image_feats)
                 self.image_adj = build_knn_neighbourhood(self.image_adj, topk=self.knn_k)
                 self.text_adj = build_sim(text_feats)
@@ -244,7 +229,6 @@ class LATTICE(GeneralRecommender):
                     del self.item_adj
                 self.item_adj = (1 - self.lambda_coeff) * learned_adj + self.lambda_coeff * (weight[0] * self.image_original_adj + weight[1] * self.text_original_adj + weight[2] * self.audio_original_adj)
             else:
-                # if self.v_feat is not None:
                 self.image_adj = build_sim(image_feats)
                 if self.new_items :
                     self.image_adj[self.new_items_set, :] = 0.0
@@ -261,7 +245,7 @@ class LATTICE(GeneralRecommender):
 
                 learned_adj = weight[0] * self.image_adj + weight[1] * self.text_adj
 
-                learned_adj = compute_normalized_laplacian(learned_adj)#.to_sparse_coo()
+                learned_adj = compute_normalized_laplacian(learned_adj)
                 torch.cuda.empty_cache()
                 if self.new_items :
                     image_org_adj = self.image_original_adj_newitems
@@ -276,8 +260,6 @@ class LATTICE(GeneralRecommender):
                     del self.item_adj
 
                 self.item_adj = (1-self.lambda_coeff) * learned_adj
-                # self.item_adj = self.item_adj.coalesce()
-                # self.item_adj = (1 - self.lambda_coeff) * learned_adj + self.lambda_coeff * (weight[0] * image_org_adj + weight[1] * text_org_adj)
         else:
             self.item_adj = self.item_adj.detach()
             if self.a_feat is None:
@@ -293,8 +275,6 @@ class LATTICE(GeneralRecommender):
             h = self.item_id_embedding.weight
             for i in range(self.n_layers):
                 h = torch.sparse.mm(self.org_adj, h) + torch.mm(self.item_adj, h)
-                # h = torch.mm(self.item_adj, h)
-                # h = torch.sparse.mm(self.item_adj, h)
             torch.cuda.empty_cache()
 
         if self.cf_model == 'ngcf':
@@ -365,14 +345,11 @@ class LATTICE(GeneralRecommender):
         user = interaction[0]
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: tiktok tree predicts via forward, not forward_inference
             restore_user_e, restore_item_e = self.forward(self.norm_adj, build_item_graph=True)
         else:
-            # restore_user_e, restore_item_e = self.forward_inference(self.norm_adj, build_item_graph=True)
             restore_user_e, restore_item_e = self.forward_inference(self.norm_adj, build_item_graph=True)
         u_embeddings = restore_user_e[user]
 
-        # dot with all item embedding to accelerate
         scores = torch.matmul(u_embeddings, restore_item_e.transpose(0, 1))
         return scores
 
@@ -384,7 +361,6 @@ class LATTICE(GeneralRecommender):
         if build_item_graph:
             weight = self.softmax(self.modal_weight)
 
-            # if self.v_feat is not None:
             self.image_adj = build_sim(image_feats)
             self.image_adj = build_knn_neighbourhood(self.image_adj, topk=self.knn_k)
             self.text_adj = build_sim(text_feats)
@@ -401,7 +377,6 @@ class LATTICE(GeneralRecommender):
 
         h = self.item_id_embedding.weight
         for i in range(self.n_layers):
-            # h = torch.mm(self.item_adj, h)
             h = torch.sparse.mm(self.org_adj, h) + torch.mm(self.item_adj, h)
 
         ego_embeddings = torch.cat((self.user_embedding.weight, self.item_id_embedding.weight), dim=0)

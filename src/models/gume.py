@@ -6,11 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from common.abstract_recommender import GeneralRecommender
-from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neighbourhood, build_knn_normalized_graph
+from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neighbourhood
 from collections import defaultdict
-import math
-from scipy.sparse import lil_matrix
-import random
 import json
 
 class GUME(GeneralRecommender):
@@ -29,7 +26,6 @@ class GUME(GeneralRecommender):
         self.knn_k = config['knn_k']
         self.n_layers = config['n_layers']
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_dim)
         self.item_id_embedding = nn.Embedding(self.n_items, self.embedding_dim)
@@ -46,7 +42,6 @@ class GUME(GeneralRecommender):
             self.extended_audio_user = nn.Embedding(self.n_users, self.embedding_dim)
             nn.init.xavier_uniform_(self.extended_audio_user.weight)
 
-        # self.dataset_path = os.path.abspath(os.getcwd()+config['data_path'] + config['dataset'])
         self.dataset_path = os.path.abspath(config['data_path'] + config['dataset'])
 
         self.data_name = config['dataset']
@@ -71,9 +66,6 @@ class GUME(GeneralRecommender):
             self.image_embedding = nn.Embedding.from_pretrained(self.v_feat, freeze=False)
 
             if self.a_feat is not None:
-                # 3-modality historical behavior preserved: the tiktok tree
-                # (a) loads a cached adj file if present and (b) applies the
-                # missing-modal mask AFTER the kNN sparsification.
                 if os.path.exists(image_adj_file):
                     image_adj = torch.load(image_adj_file)
                 else:
@@ -100,7 +92,6 @@ class GUME(GeneralRecommender):
                     image_adj[self.missing_items_v, :] = image_adj[:, self.missing_items_v] = 0.0
                     image_adj[self.missing_items_v, self.missing_items_v] = 1.0
                 image_adj = build_knn_neighbourhood(image_adj, topk=self.knn_k)
-                # image_adj = build_knn_normalized_graph(image_adj, topk=self.knn_k, is_sparse=self.sparse,norm_type='sym')
                 image_adj = compute_normalized_laplacian(image_adj)
 
                 image_adj = image_adj.to_sparse_coo()
@@ -118,8 +109,6 @@ class GUME(GeneralRecommender):
             self.text_embedding = nn.Embedding.from_pretrained(self.t_feat, freeze=False)
 
             if self.a_feat is not None:
-                # 3-modality historical behavior preserved: cached adj file +
-                # missing-modal mask applied AFTER the kNN sparsification.
                 if os.path.exists(text_adj_file):
                     text_adj = torch.load(text_adj_file)
                 else:
@@ -145,17 +134,9 @@ class GUME(GeneralRecommender):
                 if self.missing_modal :
                     text_adj[self.missing_items_t, :] = text_adj[:, self.missing_items_t] = 0.0
                     text_adj[self.missing_items_t, self.missing_items_t] = 1.0
-                # text_adj = build_knn_normalized_graph(text_adj, topk=self.knn_k, is_sparse=self.sparse, norm_type='sym')
                 text_adj = build_knn_neighbourhood(text_adj, topk=self.knn_k)
                 text_adj = compute_normalized_laplacian(text_adj)
 
-                # if self.new_items :
-                #     text_adj = build_sim(self.text_embedding.weight.detach())
-                #     text_adj[self.new_items_set, :] = 0.0
-                #     text_adj[:, self.new_items_set] = 0.0
-                #     text_adj = build_knn_neighbourhood(text_adj, topk=self.knn_k)
-                #     text_adj = compute_normalized_laplacian(text_adj)
-                #     self.text_original_adj_newitems = text_adj.cuda()
 
                 text_adj = text_adj.to_sparse_coo()
                 self.text_original_adj = text_adj.cuda()
@@ -186,12 +167,10 @@ class GUME(GeneralRecommender):
                 audio_adj = build_sim(self.audio_embedding.weight.detach())
                 audio_adj[self.new_items_set, :] = 0.0
                 audio_adj[:, self.new_items_set] = 0.0
-                # audio_adj[self.new_items_set, self.new_items_set] = 1.0
                 audio_adj = build_knn_neighbourhood(audio_adj, topk=self.knn_k)
                 audio_adj = compute_normalized_laplacian(audio_adj).to_sparse_coo()
                 self.audio_original_adj_newitems = audio_adj.cuda()
 
-        #  Enhancing User-Item Graph
         if self.a_feat is not None:
             if self.new_items :
                 self.inter = self.find_inter(self.image_original_adj_newitems, self.text_original_adj_newitems, self.audio_original_adj_newitems)
@@ -272,7 +251,6 @@ class GUME(GeneralRecommender):
         self.missing_items = np.load(os.path.join(dataset_path, f"missing_items_{self.missing_ratio}.npy"), allow_pickle = True).item()
 
         if 'a' in self.missing_items:
-            # 3-modality (tiktok) masks: keys {all, t, v, a, tv, ta, va}
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t'],
                                                     self.missing_items['tv'], self.missing_items['ta']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v'],
@@ -280,7 +258,6 @@ class GUME(GeneralRecommender):
             self.missing_items_a = np.concatenate((self.missing_items['all'], self.missing_items['a'],
                                                     self.missing_items['ta'], self.missing_items['va']))
         else:
-            # 2-modality (Amazon) masks: keys {all, t, v}
             self.missing_items_t = np.concatenate((self.missing_items['all'], self.missing_items['t']))
             self.missing_items_v = np.concatenate((self.missing_items['all'], self.missing_items['v']))
 
@@ -293,10 +270,6 @@ class GUME(GeneralRecommender):
         inter_file = os.path.join(self.dataset_path, 'inter.json')
 
         if audio_adj is not None:
-            # 3-modality historical behavior preserved: the tiktok tree caches
-            # `inter.json` on disk (loading it back on later runs, with string
-            # keys) and actually runs the intersection loop. Note the historical
-            # quirk that ado_sim is collected but NOT used in the intersection.
             if os.path.exists(inter_file):
                 with open(inter_file) as f:
                     inter = json.load(f)
@@ -333,23 +306,8 @@ class GUME(GeneralRecommender):
 
         j = 0
         inter = defaultdict(list)
-        # img_sim = []
-        # txt_sim = []
-        # for i in range(0,len(image_adj._indices()[0])):
-        #     img_id = image_adj._indices()[0][i]
-        #     txt_id = text_adj._indices()[0][i]
-        #     assert img_id == txt_id
-        #     id = img_id.item()
-        #     img_sim.append(image_adj._indices()[1][j].item())
-        #     txt_sim.append(text_adj._indices()[1][j].item())
             
-        #     if len(img_sim)==10 and len(txt_sim)==10:
-        #         it_inter = list(set(img_sim) & set(txt_sim))
-        #         inter[id] = [v for v in it_inter if v != id]
-        #         img_sim = []
-        #         txt_sim = []
             
-        #     j += 1
         
         return inter
 
@@ -404,7 +362,6 @@ class GUME(GeneralRecommender):
         return norm_adj_mat.tocsr()
 
     def sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
-        """Convert a scipy sparse matrix to a torch sparse tensor."""
         sparse_mx = sparse_mx.tocoo().astype(np.float32)
         indices = torch.from_numpy(np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
         values = torch.from_numpy(sparse_mx.data)
@@ -430,7 +387,6 @@ class GUME(GeneralRecommender):
         return single_modal
 
     def forward(self, adj, train=False):
-        #  Encoding Multiple Modalities
 
         image_item_embeds = torch.multiply(self.item_id_embedding.weight, self.image_space_trans(self.image_embedding.weight))
         text_item_embeds = torch.multiply(self.item_id_embedding.weight, self.text_space_trans(self.text_embedding.weight))
@@ -453,7 +409,6 @@ class GUME(GeneralRecommender):
                 text_item_embeds = torch.einsum("ij, i -> ij", text_item_embeds, mask)
                 if self.a_feat is not None:
                     audio_item_embeds = torch.einsum("ij, i -> ij", audio_item_embeds, mask)
-                # item_embeds = torch.einsum("ij, i -> ij", item_embeds, mask)
         else :
             image_org_adj = self.image_original_adj
             text_org_adj = self.text_original_adj
@@ -485,7 +440,6 @@ class GUME(GeneralRecommender):
         else:
             extended_it_embeds = (extended_image_embeds + extended_text_embeds) / 2
 
-        # Attributes Separation for Better Integration
         if self.a_feat is not None:
             image_weights, text_weights, audio_weights = torch.split(
                 self.softmax(
@@ -562,14 +516,13 @@ class GUME(GeneralRecommender):
         neg_items = interaction[2]
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved (tiktok tree)
             if self.new_items and np.isin(neg_items.detach().cpu().numpy(), self.new_items_set).sum() != 0 :
                 assert False, "New Item Error !!"
 
             if self.missing_modal :
-                t_index = np.setdiff1d(pos_items.detach().cpu().numpy(), self.missing_items_t) # t 있는 애들
-                v_index = np.setdiff1d(pos_items.detach().cpu().numpy(), self.missing_items_v) # v 있는 애들
-                a_index = np.setdiff1d(pos_items.detach().cpu().numpy(), self.missing_items_a) # a 있는 애들
+                t_index = np.setdiff1d(pos_items.detach().cpu().numpy(), self.missing_items_t)
+                v_index = np.setdiff1d(pos_items.detach().cpu().numpy(), self.missing_items_v)
+                a_index = np.setdiff1d(pos_items.detach().cpu().numpy(), self.missing_items_a)
 
                 tv_index = np.setdiff1d(pos_items.detach().cpu().numpy(), np.union1d(self.missing_items_t, self.missing_items_v))
                 ta_index = np.setdiff1d(pos_items.detach().cpu().numpy(), np.union1d(self.missing_items_t, self.missing_items_a))
@@ -610,8 +563,6 @@ class GUME(GeneralRecommender):
         neg_i_g_embeddings = items_embeddings[neg_items]
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: pairwise alignment over
-            # the fully-complete (tva) items, averaged over the 3 pairs.
             vt_loss = self.vt_loss * self.align_vt(explicit_image_embeds[tva_index], explicit_text_embeds[tva_index])
             vt_loss += self.vt_loss * self.align_vt(explicit_audio_embeds[tva_index], explicit_text_embeds[tva_index])
             vt_loss += self.vt_loss * self.align_vt(explicit_image_embeds[tva_index], explicit_audio_embeds[tva_index])
@@ -632,7 +583,6 @@ class GUME(GeneralRecommender):
         
         extended_it_user, extended_it_items = torch.split(extended_it_embeds, [self.n_users, self.n_items], dim=0)
 
-        # Enhancing User Modality Representation
         c_loss = self.InfoNCE(extended_it_user[users], integration_users[users], self.um_temp)
         noise_loss_1 = self.cal_noise_loss(users, integration_users, self.um_temp)
         noise_loss_2 = self.cal_noise_loss(users, extended_it_user, self.um_temp)

@@ -1,16 +1,12 @@
 # coding: utf-8
 
 import os
-import random
 import numpy as np
-import scipy.sparse as sp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from common.abstract_recommender import GeneralRecommender
-from common.loss import BPRLoss, EmbLoss, L2Loss
-from utils.utils import build_sim, compute_normalized_laplacian
 
 
 class SIBRAR(GeneralRecommender):
@@ -22,7 +18,6 @@ class SIBRAR(GeneralRecommender):
 
         self.n_nodes = self.n_users + self.n_items
 
-        # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
 
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_dim)
@@ -110,7 +105,6 @@ class SIBRAR(GeneralRecommender):
         self.missing_imputation = config['missing_imputation']
 
 
-
     def forward(self):
         pass
 
@@ -159,8 +153,6 @@ class SIBRAR(GeneralRecommender):
         pos_text_embeddings, neg_text_embeddings = text_embeddings[pos_items], text_embeddings[neg_items]
 
         if self.a_feat is not None:
-            # 3-modality historical behavior preserved: multinomial draws 3 of 4 modalities but only the
-            # first two samples are used downstream (RNG consumption must match the tiktok tree)
             pos_audio_embeddings, neg_audio_embeddings = audio_embeddings[pos_items], audio_embeddings[neg_items]
 
             pos_item_embeddings = torch.stack([pos_id_embeddings, pos_image_embeddings, pos_text_embeddings, pos_audio_embeddings], dim = 1)
@@ -183,10 +175,7 @@ class SIBRAR(GeneralRecommender):
 
         pos_item_final = (pos_item_modal_1 + pos_item_modal_2)
         neg_item_final = (neg_item_modal_1 + neg_item_modal_2)
-        # pos_cnt, neg_cnt = self.modality_count[pos_items], self.modality_count[neg_items]
 
-        # pos_item_final = torch.einsum("ij, i -> ij", pos_item_final, pos_cnt)
-        # neg_item_final = torch.einsum("ij, i -> ij", neg_item_final, neg_cnt)
 
         batch_mf_loss = self.bpr_loss(user_embeddings, pos_item_final, neg_item_final)
 
@@ -198,7 +187,6 @@ class SIBRAR(GeneralRecommender):
         info_loss += -torch.log(torch.exp(pos_score)) + torch.logaddexp(pos_score, neg_score_1)
         info_loss += -torch.log(torch.exp(pos_score)) + torch.logaddexp(pos_score, neg_score_2)
 
-        # print(f"BPR : {batch_mf_loss:.4f} | INFO : {info_loss.mean():.4f}")
         if info_loss.mean() < 0.049 :
             print("check")
         return batch_mf_loss + info_loss.mean() * self.lamb
@@ -217,11 +205,9 @@ class SIBRAR(GeneralRecommender):
         id_embeddings = (self.fc1(self.dropout(id_embeddings)))
         id_embeddings = self.fc2(self.relu(id_embeddings))
 
-        # image_embeddings = self.b_norm(self.fc1(self.dropout(image_embeddings)))
         image_embeddings = (self.fc1(self.dropout(image_embeddings)))
         image_embeddings = self.fc2(self.relu(image_embeddings))
 
-        # text_embeddings = self.b_norm(self.fc1(self.dropout(text_embeddings)))
         text_embeddings = (self.fc1(self.dropout(text_embeddings)))
         text_embeddings = self.fc2(self.relu(text_embeddings))
 
@@ -239,4 +225,3 @@ class SIBRAR(GeneralRecommender):
             item_embeddings = torch.mean(torch.stack([id_embeddings, image_embeddings, text_embeddings], dim = 1), dim = 1)
         scores = torch.matmul(user_embeddings, item_embeddings.transpose(0, 1))
         return scores
-
