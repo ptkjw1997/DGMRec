@@ -7,6 +7,7 @@ Outputs of the significance tests behind the markers in Tables 2 and 3.
 - Seeds: each model is run with five seeds {999, 42, 2023, 2024, 2025}; the per-user metric is averaged over the five seeds before testing.
 - Test: paired, two-sided t-test (`scipy.stats.ttest_rel`) between DGMRec and the strongest baseline, i.e., the baseline with the highest mean for that dataset and metric.
 - Markers: `**` p < 0.01, `*` p < 0.05, `n.s.` otherwise.
+- Reproduction: set `save_user_metrics: True` in `src/configs/overall.yaml`, run `./run.sh <Model> <dataset> <seed>` for every model and seed, then `python scripts/significance_test.py --dataset <dataset>`.
 
 ## Table 2: Missing Modality Setting
 

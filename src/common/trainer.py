@@ -199,7 +199,7 @@ class Trainer(AbstractTrainer):
                         os.makedirs(save_dir, exist_ok=True)
                         torch.save(self.model, os.path.join(save_dir, 'best.pth'))
                     if self.config['save_user_metrics'] and getattr(self.evaluator, 'last_user_metrics', None) is not None:
-                        path = self.config['user_metrics_path'] or 'user_metrics.npz'
+                        path = self.config['user_metrics_path'] or f"../user_metrics/{self.config['model']}_{self.config['dataset']}_{self.config['seed']}.npz"
                         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
                         np.savez(path, **self.evaluator.last_user_metrics)
 

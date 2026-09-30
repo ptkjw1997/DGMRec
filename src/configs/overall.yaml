@@ -9,6 +9,7 @@ is_multimodal_model: True
 
 checkpoint_dir: 'saved'
 save_recommended_topk: False
+save_user_metrics: False
 recommend_topk: 'recommend_topk/'
 
 embedding_size: 64
