@@ -122,19 +122,9 @@ class DGMRec(GeneralRecommender):
             nn.init.xavier_uniform_(self._get(m, 'encoder_s').weight)
 
         for m in self.mods :
-            setattr(self, f'user_{MODALITY_NAMES[m]}_prefer', nn.Embedding(self.n_users, dim))
-        for m in self.mods :
-            nn.init.xavier_uniform_(getattr(self, f'user_{MODALITY_NAMES[m]}_prefer').weight)
-
-        for m in self.mods :
             self._set(m, 'g_filter_trans', nn.Linear(dim, dim, bias = False))
         for m in self.mods :
             nn.init.xavier_uniform_(self._get(m, 'g_filter_trans').weight)
-
-        for m in self.mods :
-            self._set(m, 's_filter_trans', nn.Linear(dim, dim, bias = False))
-        for m in self.mods :
-            nn.init.xavier_uniform_(self._get(m, 's_filter_trans').weight)
 
         for m in self.mods :
             self._set(m, 'decoder', nn.Linear(dim * 2, feats[m].shape[1]).to(self.device))
