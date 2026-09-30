@@ -1,0 +1,14 @@
+{
+  "use_modal_type": [
+    null
+  ],
+  "reg_weight": [
+    0.0
+  ],
+  "hyper_parameters": [
+    "missing_imputation",
+    "reg_weight",
+    "seed",
+    "use_modal_type"
+  ]
+}

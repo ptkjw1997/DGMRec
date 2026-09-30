@@ -1,0 +1,18 @@
+{
+  "reg_weight": [
+    0.1
+  ],
+  "learning_rate": [
+    0.001
+  ],
+  "eps": [
+    0.01
+  ],
+  "hyper_parameters": [
+    "eps",
+    "learning_rate",
+    "missing_imputation",
+    "reg_weight",
+    "seed"
+  ]
+}

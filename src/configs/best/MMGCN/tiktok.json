@@ -1,0 +1,13 @@
+{
+  "reg_weight": [
+    0.001
+  ],
+  "learning_rate": [
+    0.001
+  ],
+  "hyper_parameters": [
+    "reg_weight",
+    "learning_rate",
+    "seed"
+  ]
+}

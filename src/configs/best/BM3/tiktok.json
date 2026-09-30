@@ -1,0 +1,18 @@
+{
+  "n_layers": [
+    1
+  ],
+  "reg_weight": [
+    0.01
+  ],
+  "dropout": [
+    0.3
+  ],
+  "hyper_parameters": [
+    "dropout",
+    "missing_imputation",
+    "n_layers",
+    "reg_weight",
+    "seed"
+  ]
+}

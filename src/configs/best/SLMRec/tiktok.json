@@ -1,0 +1,22 @@
+{
+  "learning_rate": [
+    0.001
+  ],
+  "ssl_temp": [
+    0.1
+  ],
+  "ssl_alpha": [
+    0.1
+  ],
+  "reg": [
+    0.0001
+  ],
+  "hyper_parameters": [
+    "learning_rate",
+    "missing_imputation",
+    "reg",
+    "seed",
+    "ssl_alpha",
+    "ssl_temp"
+  ]
+}

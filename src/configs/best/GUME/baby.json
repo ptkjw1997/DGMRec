@@ -1,0 +1,7 @@
+{
+  "n_layers": 1,
+  "bm_temp": 0.4,
+  "um_loss": 0.01,
+  "um_temp": 0.1,
+  "vt_loss": 0.1
+}
